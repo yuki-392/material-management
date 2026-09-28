@@ -1,6 +1,8 @@
 import { auth, signOut } from "@/auth";
+import { isProfileComplete } from "@/lib/authorization";
 import { getAuthRedirect } from "@/lib/auth-routing.js";
 import { getMissingAuthEnvironmentVariables } from "@/lib/auth-environment.js";
+import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 import Image from "next/image";
 import type { ReactNode } from "react";
@@ -16,9 +18,23 @@ export default async function WorkspaceLayout({
 
   const session = await auth();
 
-  if (!session?.user) {
-    const destination = getAuthRedirect("workspace", false);
+  if (!session?.user?.id) {
+    const destination = getAuthRedirect("workspace", false, false);
     redirect(destination ?? "/login");
+  }
+
+  const profile = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { userType: true, studentNumber: true },
+  });
+  const destination = getAuthRedirect(
+    "workspace",
+    true,
+    isProfileComplete(profile),
+  );
+
+  if (destination) {
+    redirect(destination);
   }
 
   async function logOut() {

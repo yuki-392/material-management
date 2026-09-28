@@ -1,19 +1,27 @@
 /**
- * @param {"root" | "login" | "workspace"} route
+ * @param {"root" | "login" | "workspace" | "profile-setup"} route
  * @param {boolean} isAuthenticated
- * @returns {"/login" | "/labs" | null}
+ * @param {boolean} profileComplete
+ * @returns {"/login" | "/labs" | "/profile/setup" | null}
  */
-export function getAuthRedirect(route, isAuthenticated) {
+export function getAuthRedirect(route, isAuthenticated, profileComplete) {
   if (route === "root") {
-    return isAuthenticated ? "/labs" : "/login";
+    if (!isAuthenticated) return "/login";
+    return profileComplete ? "/labs" : "/profile/setup";
   }
 
   if (route === "login" && isAuthenticated) {
-    return "/labs";
+    return profileComplete ? "/labs" : "/profile/setup";
   }
 
-  if (route === "workspace" && !isAuthenticated) {
-    return "/login";
+  if (route === "workspace") {
+    if (!isAuthenticated) return "/login";
+    return profileComplete ? null : "/profile/setup";
+  }
+
+  if (route === "profile-setup") {
+    if (!isAuthenticated) return "/login";
+    return profileComplete ? "/labs" : null;
   }
 
   return null;

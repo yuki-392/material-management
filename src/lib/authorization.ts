@@ -5,9 +5,10 @@ import { prisma } from "@/lib/db";
 import {
   AuthorizationError,
   createAuthorizationHelpers,
+  isProfileComplete,
 } from "@/lib/authorization-core.js";
 
-export { AuthorizationError };
+export { AuthorizationError, isProfileComplete };
 
 const authorization = createAuthorizationHelpers({
   getSession: auth,

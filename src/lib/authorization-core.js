@@ -54,6 +54,28 @@ export class AuthorizationError extends Error {
 }
 
 /**
+ * A profile is complete when its classification-specific student number rule
+ * is satisfied. A display name is editable but is not a completion requirement
+ * in the current product requirements.
+ *
+ * @param {{ userType: string | null, studentNumber: string | null } | null} profile
+ */
+export function isProfileComplete(profile) {
+  if (!profile) {
+    return false;
+  }
+
+  const isTeacherWithoutStudentNumber =
+    profile.userType === "TEACHER" && profile.studentNumber === null;
+  const isStudentWithStudentNumber =
+    profile.userType === "STUDENT" &&
+    typeof profile.studentNumber === "string" &&
+    profile.studentNumber.trim().length > 0;
+
+  return isTeacherWithoutStudentNumber || isStudentWithStudentNumber;
+}
+
+/**
  * Build server-side authorization helpers around Auth.js and Prisma.
  * Dependencies are injected so the decisions and query boundaries can be tested
  * without a live database or an Auth.js session.
@@ -78,14 +100,7 @@ export function createAuthorizationHelpers({ getSession, db }) {
       select: { userType: true, studentNumber: true },
     });
 
-    const isTeacherWithNoStudentNumber =
-      profile?.userType === "TEACHER" && profile.studentNumber === null;
-    const isStudentWithStudentNumber =
-      profile?.userType === "STUDENT" &&
-      typeof profile.studentNumber === "string" &&
-      profile.studentNumber.trim().length > 0;
-
-    if (!isTeacherWithNoStudentNumber && !isStudentWithStudentNumber) {
+    if (!isProfileComplete(profile)) {
       throw new AuthorizationError("PROFILE_INCOMPLETE");
     }
   }

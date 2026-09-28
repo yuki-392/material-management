@@ -1,6 +1,8 @@
 import { auth, signIn } from "@/auth";
+import { isProfileComplete } from "@/lib/authorization";
 import { getAuthRedirect } from "@/lib/auth-routing.js";
 import { getMissingAuthEnvironmentVariables } from "@/lib/auth-environment.js";
+import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 
 export default async function LoginPage() {
@@ -9,7 +11,17 @@ export default async function LoginPage() {
 
   if (!missingEnvironmentVariables.includes("AUTH_SECRET")) {
     const session = await auth();
-    const destination = getAuthRedirect("login", Boolean(session?.user));
+    const profile = session?.user?.id
+      ? await prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { userType: true, studentNumber: true },
+        })
+      : null;
+    const destination = getAuthRedirect(
+      "login",
+      Boolean(session?.user?.id),
+      isProfileComplete(profile),
+    );
 
     if (destination) {
       redirect(destination);
