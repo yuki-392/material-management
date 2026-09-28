@@ -13,6 +13,7 @@
 ## 想定する構成
 
 - Next.js App Router、TypeScript、PostgreSQL、Prisma、Tailwind CSSを基本とする。
+- Node.js 24 LTSを採用する。Prisma ORM 7の対応対象に含まれ、現行LTSとして保守されているため（バージョンは `.nvmrc` を参照）。
 - MVPの認証はAuth.jsとGoogle OAuthを使う。ログインはGoogle経由で行い、アプリ独自のパスワード認証は実装しない。
 - Auth.jsのPrisma Adapterとの互換性を確認したうえでORMのメジャーバージョンを選ぶ。初期計画では公式連携ガイドに合わせてPrisma ORM 7を使う。
 - 単一のNext.jsアプリでは、読み取りにServer Components、更新にServer Actionsを使う。別のREST API層、状態管理ライブラリ、ファイル保存、通知などは必要性が出るまで追加しない。
