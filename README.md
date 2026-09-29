@@ -1,118 +1,201 @@
-# 研究室タスク・資料管理アプリ
+# 研究室・ゼミ向け タスク・資料管理アプリ
 
-研究室やゼミのLabで、メンバー、タスク、締切、進捗、共有資料を管理するWebアプリです。Next.js App Router、TypeScript、Auth.js、Prisma、PostgreSQLを使用しています。資料ファイル本体はローカル開発環境のSeaweedFS（S3互換API）へ保存します。
+研究室やゼミのメンバーが、Lab単位でタスクと資料を共有するWebアプリです。
 
-## 現在のMVP
+## 概要
 
-- Google OAuthログインとプロフィール設定（教員・学生、学生番号）
-- Lab作成とOwnerによるメンバー管理
-- Lab内Taskの作成・編集・削除、担当者と締切の設定
-- PDF、Office文書、JPEG、PNGのアップロードと資料管理
-- Labメンバーに限定した資料の表示・ダウンロード
+タスク、担当者、締切、進捗、共有資料をLabごとにまとめて管理します。研究室やゼミでは、作業内容や資料が複数の場所に分かれると、担当や期限を追いにくくなります。このアプリではGoogleアカウントでログインしたメンバーが、同じLabの情報を共有できます。
 
-認証・認可やDB設計の判断は [`docs/requirements.md`](docs/requirements.md) と [`docs/database.md`](docs/database.md) を参照してください。
+## 制作背景
 
-## 必要なもの
+研究室・ゼミの共同作業では、タスク、担当、締切、資料を一か所で確認できると、メンバー間で状況を共有しやすくなります。タスク管理と資料共有をLab単位にまとめ、メンバーの所属に沿ったアクセス制御も学べる題材として制作しました。
 
-- Node.js 24（バージョンは [`.nvmrc`](.nvmrc) を参照）とnpm
-- Docker Compose
-- Google OAuth Webクライアント
+## 主な機能
 
-## 初回セットアップ
+- **ログインとプロフィール** — Google OAuthでログインし、教員・学生の区分を設定します。学生は学生番号が必要です。ログアウトもできます。
+- **Labとメンバー** — Lab未所属のユーザーがLabを作成します。作成者はOwner兼Memberになります。Ownerは、アプリに登録済みのユーザーをメールアドレスで追加・削除できます。
+- **Task管理** — Lab内のメンバーがTaskを作成・編集・削除できます。タイトル、説明、`TODO`・`IN_PROGRESS`・`DONE`のstatus、担当者、締切を設定します。
+- **Material管理** — PDF、DOCX、PPTX、XLSX、JPEG、PNGをアップロードし、Lab内の資料一覧から管理できます。PDFと画像はブラウザーで開き、Officeファイルはダウンロードします。アップロード上限は1ファイル20MiBです。
 
-1. Node.js 24を選び、依存パッケージをインストールします。
+## 画面イメージ
 
-   ```bash
-   nvm install
-   nvm use
-   npm ci
-   ```
+### Login
 
-2. ローカル環境変数ファイルを作成します。
+![Googleログイン画面](docs/screenshots/login.png)
 
-   ```bash
-   cp .env.example .env
-   ```
+### Lab
 
-3. `.env`を編集します。PostgreSQLの`POSTGRES_DB`、`POSTGRES_USER`、`POSTGRES_PASSWORD`と`DATABASE_URL`は同じ接続先になるよう設定します。`S3_ENDPOINT`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET`、`S3_REGION`はローカルSeaweedFSの接続情報を使います。
+![Lab詳細とTask・資料・メンバーへの導線](docs/screenshots/lab.png)
 
-   `AUTH_SECRET`には十分な長さのランダムな値を設定します。例えば`openssl rand -base64 32`で生成できます。生成値は`.env`だけに保存し、共有・コミットしないでください。
+### Member
 
-   Google CloudのOAuth Webクライアントには、次の承認済みリダイレクトURIを登録します。
+![Labメンバー一覧と追加フォーム](docs/screenshots/member.png)
 
-   ```text
-   http://localhost:3000/api/auth/callback/google
-   ```
+### Task
 
-   `.env`の`AUTH_GOOGLE_ID`と`AUTH_GOOGLE_SECRET`に対応する値を設定します。開発時は`http://localhost:3000`を使ってください。`127.0.0.1`ではGoogle OAuthのcallback URIが一致しません。
+![Task作成フォーム](docs/screenshots/task1.png)
 
-4. PostgreSQLとSeaweedFSを起動し、Prisma Clientを生成して既存migrationを適用します。
+![登録済みTaskと締切表示](docs/screenshots/task2.png)
 
-   ```bash
-   docker compose up -d
-   npm run db:generate
-   npx prisma migrate deploy
-   ```
+### Material
 
-5. Next.js開発サーバーを起動します。
+![Materialアップロードフォーム](docs/screenshots/materials1.png)
 
-   ```bash
-   npm run dev
-   ```
+![登録済みMaterial一覧](docs/screenshots/materials2.png)
 
-   ブラウザーで <http://localhost:3000> を開きます。Googleログイン後、初回はプロフィールを設定します。学生は学生番号が必要です。
+## 技術スタック
 
-## 確認コマンド
+| 分類 | 技術 |
+| --- | --- |
+| Runtime | Node.js 24（`.nvmrc`） |
+| Web | Next.js 16.3.6、React 19、TypeScript 5 |
+| UI | Tailwind CSS 4 |
+| 認証 | Auth.js（`next-auth` v5 beta）、Google OAuth、Prisma Adapter |
+| DB | Prisma ORM 7、PostgreSQL 18（Docker Compose） |
+| ファイルストレージ | AWS SDK for JavaScript v3（S3 Client）、SeaweedFS 4.48 |
+| 開発環境 | Docker Compose、npm |
 
-```bash
-npm run lint
-npx tsc --noEmit
-node --test
-npx next build --webpack
-git diff --check
+## アーキテクチャ
+
+```text
+Browser
+  ↓
+Next.js App Router
+  ├─ Auth.js ── Google OAuth
+  ├─ Server Components / Server Actions
+  │      └─ Prisma ── PostgreSQL
+  └─ Material Route Handler
+         └─ AWS SDK for JavaScript (S3) ── SeaweedFS
 ```
 
-## 停止
+画面の読み取りは主にServer Components、更新はServer Actionsで行います。Materialのファイル取得は認可を確認するRoute Handlerを通します。
 
-開発サーバーは起動中のターミナルで`Ctrl+C`を押して停止します。Dockerサービスは次のコマンドで停止できます。
+## DB設計
+
+```mermaid
+erDiagram
+    User ||--o{ Lab : owns
+    User ||--o| LabMember : membership
+    Lab ||--o{ LabMember : includes
+    Lab ||--o{ Task : contains
+    User o|--o{ Task : assigned_to
+    Lab ||--o{ Material : contains
+    User o|--o{ Material : uploaded_by
+```
+
+- `LabMember`は所属日時を持つ明示的な関係モデルです。`userId`の一意制約により、1 Userが所属できるLabは最大1つです。
+- Lab作成時は、LabとOwnerの`LabMember`を同じトランザクションで作成します。アプリ上のOwnerはLabのMemberでもあります。
+- TaskとMaterialはそれぞれ必ず1つのLabに属します。担当者とMaterial登録者は任意です。
+- Auth.js Adapter用の`Account`と`Session`もDBに保存します。図では主要な業務モデルを優先しています。
+
+詳細は[`docs/database.md`](docs/database.md)を参照してください。
+
+## 認証と認可
+
+Google OAuthはユーザーの認証に使い、Labへのアクセス権はLab所属とOwner情報から別に判定します。Auth.jsのDB Sessionを利用し、プロフィール完了前はLab機能へ進めません。
+
+Labの読み取り・更新、Server Action、Material Route Handlerでは、サーバー側で対象Labへの所属を確認します。メンバーの追加・削除はOwnerに限定し、Taskの担当者も同じLabのメンバーに限ります。ボタンの表示制御だけを認可として扱いません。非所属Labは存在の有無を区別しない404相当の応答にします。
+
+## 設計上の工夫
+
+- **TaskのLab境界** — Task操作ではTask IDだけに依存せず、対象Labとユーザーの所属を併せて確認します。担当者は同じLabのメンバーだけを設定できます。statusはEnumで管理し、締切は`Asia/Tokyo`で入力・表示します。
+- **所属の整合性** — 1 User 1 Labを`LabMember.userId`のDB一意制約で支えます。LabとOwnerのMember作成、メンバー削除時の担当解除と所属削除は、それぞれトランザクションで行います。
+- **DBとファイルの分担** — PostgreSQLにはMaterialのメタデータを保存し、ファイル本体はprivateなS3互換ストレージのSeaweedFSへ保存します。ストレージキーはサーバーで生成し、S3 endpointをブラウザーに公開しません。
+- **ストレージ失敗への対応** — アップロード後のDB登録に失敗した場合はオブジェクト削除を試みます。削除時にストレージ側で失敗した場合はDB行を残し、再試行できるようにします。
+
+## Materialの検証範囲
+
+アップロードでは20MiB上限と、拡張子・ブラウザー提供MIME typeの組み合わせを確認します。ファイル内容のマジックバイト検査やウイルススキャンは行っていません。この形式確認だけでファイルの安全性を完全に保証するものではありません。
+
+## セットアップ
+
+### 必要なもの
+
+- Node.js 24とnpm
+- Docker Compose
+- Google CloudのOAuth Webクライアント
+
+GitHubのClone URLでリポジトリをcloneし、プロジェクトディレクトリで次を実行します。
+
+```bash
+nvm install
+nvm use
+npm ci
+cp .env.example .env
+```
+
+`.env`にPostgreSQL、SeaweedFS、Auth.js、Google OAuthの設定を行います。環境変数名と用途は後述の表を参照してください。`.env.example`の認証・接続値はローカル開発用であり、本番用として使わないでください。`AUTH_SECRET`はローカルで生成し、`.env`の外へ出したりコミットしたりしないでください（例: `openssl rand -base64 32`）。
+
+Google Cloud ConsoleでOAuth Client IDの種類にWeb applicationを選び、次のoriginとredirect URIを登録します。
+
+```text
+Authorized JavaScript origin: http://localhost:3000
+Authorized redirect URI:      http://localhost:3000/api/auth/callback/google
+```
+
+開発時は`http://localhost:3000`を使用してください。`127.0.0.1`ではcallback URIが一致せず、`redirect_uri_mismatch`になります。
+
+PostgreSQLとSeaweedFSを起動し、Prisma Clientを生成してmigrationを適用します。
+
+```bash
+docker compose up -d
+npm run db:generate
+npx prisma migrate deploy
+npm run dev
+```
+
+ブラウザーで<http://localhost:3000>を開きます。停止時は開発サーバーのターミナルで`Ctrl+C`を押し、必要に応じて次でDockerサービスを停止します。
 
 ```bash
 docker compose down
 ```
 
-`docker compose down -v`はPostgreSQLとSeaweedFSのデータボリュームも削除するため、通常の停止には使わないでください。
+`docker compose down -v`はDBとSeaweedFSのデータボリュームも削除するため、通常の停止には使わないでください。
 
-## 安全なブラウザE2E確認
+## 環境変数
 
-既存DBを使うE2E確認は避け、作業ごとに専用PostgreSQL DBを作成してください。次の例のDB名は未使用の一意な名前に置き換えます。
+値はREADMEに記載せず、用途だけを示します。設定例は[`.env.example`](.env.example)を参照してください。
 
-```bash
-docker compose exec -T db sh -c 'createdb -U "$POSTGRES_USER" material_management_e2e_YYYYMMDD'
-```
+| 変数 | 用途 |
+| --- | --- |
+| `POSTGRES_DB` | PostgreSQLのDB名 |
+| `POSTGRES_USER` | PostgreSQL接続ユーザー |
+| `POSTGRES_PASSWORD` | PostgreSQL接続パスワード |
+| `POSTGRES_PORT` | ホスト側のPostgreSQLポート |
+| `DATABASE_URL` | PrismaのPostgreSQL接続URL |
+| `S3_ENDPOINT` | SeaweedFS S3互換endpoint |
+| `S3_ACCESS_KEY_ID` | S3接続用Access Key ID |
+| `S3_SECRET_ACCESS_KEY` | S3接続用Secret Access Key |
+| `S3_BUCKET` | Material保存先bucket |
+| `S3_REGION` | S3互換クライアントのregion設定 |
+| `AUTH_SECRET` | Auth.jsのセッション署名・暗号化用secret |
+| `AUTH_GOOGLE_ID` | Google OAuth Client ID |
+| `AUTH_GOOGLE_SECRET` | Google OAuth Client Secret |
 
-アプリとmigration用に、`.env`の`DATABASE_URL`の接続情報を保ったまま、URL内のDB名だけを一時DBへ差し替えます。接続URLを画面共有・ログ・リポジトリへ出さないでください。一時DBを指定した状態でmigrationを適用してから開発サーバーを起動します。
+## テスト・動作確認
 
-```bash
-export DATABASE_URL='<.envと同じ接続先で、DB名だけ一時DBにしたURL>'
-npx prisma migrate deploy
-npm run dev
-```
+自動検証ではNode.js標準の`node:test`によるテスト、ESLint、TypeScript確認、Next.js buildを使います。実ブラウザーのE2Eは手動確認であり、自動ブラウザーE2Eテストは導入していません。
 
-実ブラウザーでは`http://localhost:3000`を使います。テストファイルには識別しやすい名前を付け、アップロード前後のSeaweedFSオブジェクト数または一覧を記録してください。確認したテスト用資料はアプリから削除し、SeaweedFSのテスト用オブジェクトだけが消えたことを確認します。既存オブジェクトは削除しません。
+| 確認方法 | コマンド・範囲 | 結果 |
+| --- | --- | --- |
+| Lint | `npm run lint` | PASS |
+| TypeScript | `npx tsc --noEmit` | PASS |
+| Unit / logic tests | `node --test` | PASS（82件） |
+| Production build | `npx next build --webpack` | PASS |
+| Patch whitespace | `git diff --check` | PASS |
+| 手動ブラウザーE2E（主要導線） | Google OAuth、Profile、Lab、Member、Task、Material、Logout | PASS |
+| 認可境界（ユーザー手動確認） | 別Lab URL、Task / Material ID指定、Owner限定操作、Server Action相当の送信値改変 | PASS |
 
-確認終了後は開発サーバーを停止し、一時DBだけを削除します。
+主要導線は実ブラウザーで確認しました。認可境界は、前回BLOCKEDだった項目をユーザーが手動で確認しPASSと報告した結果です。自動ブラウザーE2Eテストは導入していません。
 
-```bash
-docker compose exec -T db sh -c 'dropdb -U "$POSTGRES_USER" material_management_e2e_YYYYMMDD'
-```
+## 今後の改善
 
-一時DBのURLを含むシェル設定を使った場合は、終了時にその設定も解除します。既存DBとSeaweedFSの開始時データ件数が変わっていないことを確認してください。
+- 本番環境へのデプロイと本番用オブジェクトストレージの選定
+- ブラウザーE2Eの自動化
+- マジックバイト検査やウイルススキャンなど、ファイル内容の検査
+- Task・Materialの検索やフィルタリング
 
-## 主なファイル
+## 関連ドキュメント
 
-- [`src/app/`](src/app/): App Routerの画面、Server Actions、資料ファイルRoute Handler
-- [`src/lib/`](src/lib/): 認可、入力検証、ドメイン処理、ストレージ連携
-- [`prisma/schema.prisma`](prisma/schema.prisma): Prismaデータモデル
-- [`prisma/migrations/`](prisma/migrations/): DB migration
-- [`compose.yml`](compose.yml): ローカルPostgreSQLとSeaweedFS
-- [`.env.example`](.env.example): 環境変数名とローカル用の例
+- [MVP要件](docs/requirements.md)
+- [DB設計](docs/database.md)
