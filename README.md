@@ -51,8 +51,8 @@
 | Web | Next.js 16.3.6、React 19、TypeScript 5 |
 | UI | Tailwind CSS 4 |
 | 認証 | Auth.js（`next-auth` v5 beta）、Google OAuth、Prisma Adapter |
-| DB | Prisma ORM 7、PostgreSQL 18（Docker Compose） |
-| ファイルストレージ | AWS SDK for JavaScript v3（S3 Client）、SeaweedFS 4.48 |
+| DB | Prisma ORM 7、PostgreSQL 18（ローカル）、Neon（本番） |
+| ファイルストレージ | AWS SDK for JavaScript v3（S3 Client）、SeaweedFS 4.48（ローカル）、S3互換オブジェクトストレージ（本番） |
 | 開発環境 | Docker Compose、npm |
 
 ## アーキテクチャ
@@ -60,15 +60,27 @@
 ```text
 Browser
   ↓
-Next.js App Router
+Vercel / Next.js App Router
   ├─ Auth.js ── Google OAuth
   ├─ Server Components / Server Actions
-  │      └─ Prisma ── PostgreSQL
+  │      └─ Prisma ── PostgreSQL（ローカル: Docker Compose / 本番: Neon）
   └─ Material Route Handler
-         └─ AWS SDK for JavaScript (S3) ── SeaweedFS
+         └─ AWS SDK for JavaScript (S3)
+                ├─ ローカル: SeaweedFS
+                └─ 本番: privateなS3互換オブジェクトストレージ
 ```
 
 画面の読み取りは主にServer Components、更新はServer Actionsで行います。Materialのファイル取得は認可を確認するRoute Handlerを通します。
+
+## 本番環境
+
+- **公開URL** — [https://material-management-orpin.vercel.app/](https://material-management-orpin.vercel.app/)
+- **Webアプリ** — VercelでNext.jsアプリを実行します。
+- **データベース** — NeonのPostgreSQLを使い、Prisma Migrateでスキーマを管理します。
+- **ファイル** — ファイル本体はprivateなS3互換オブジェクトストレージに保存します。アプリはサーバー側のAWS SDKから接続し、PostgreSQLにはMaterialのメタデータとストレージキーを保存します。接続先・認証情報は`S3_ENDPOINT`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET`、`S3_REGION`で設定します。
+- **環境変数** — 本番用のDB・OAuth・ストレージ設定はVercelの環境変数として管理します。値をリポジトリに保存しません。
+
+ローカル開発ではDocker ComposeのPostgreSQLとSeaweedFSを使います。本番ストレージも同じS3互換APIで接続し、SeaweedFSはローカル開発用です。
 
 ## DB設計
 
@@ -158,16 +170,16 @@ docker compose down
 
 | 変数 | 用途 |
 | --- | --- |
-| `POSTGRES_DB` | PostgreSQLのDB名 |
-| `POSTGRES_USER` | PostgreSQL接続ユーザー |
-| `POSTGRES_PASSWORD` | PostgreSQL接続パスワード |
-| `POSTGRES_PORT` | ホスト側のPostgreSQLポート |
-| `DATABASE_URL` | PrismaのPostgreSQL接続URL |
-| `S3_ENDPOINT` | SeaweedFS S3互換endpoint |
-| `S3_ACCESS_KEY_ID` | S3接続用Access Key ID |
-| `S3_SECRET_ACCESS_KEY` | S3接続用Secret Access Key |
-| `S3_BUCKET` | Material保存先bucket |
-| `S3_REGION` | S3互換クライアントのregion設定 |
+| `POSTGRES_DB` | ローカルPostgreSQLのDB名 |
+| `POSTGRES_USER` | ローカルPostgreSQL接続ユーザー |
+| `POSTGRES_PASSWORD` | ローカルPostgreSQL接続パスワード |
+| `POSTGRES_PORT` | ローカルPostgreSQLのホスト側ポート |
+| `DATABASE_URL` | PrismaのPostgreSQL接続URL（ローカルまたは本番Neon） |
+| `S3_ENDPOINT` | S3互換ストレージのendpoint（ローカルはSeaweedFS） |
+| `S3_ACCESS_KEY_ID` | S3互換ストレージ接続用Access Key ID |
+| `S3_SECRET_ACCESS_KEY` | S3互換ストレージ接続用Secret Access Key |
+| `S3_BUCKET` | Materialファイル保存先bucket |
+| `S3_REGION` | S3互換ストレージのregion設定 |
 | `AUTH_SECRET` | Auth.jsのセッション署名・暗号化用secret |
 | `AUTH_GOOGLE_ID` | Google OAuth Client ID |
 | `AUTH_GOOGLE_SECRET` | Google OAuth Client Secret |
@@ -188,9 +200,10 @@ docker compose down
 
 主要導線は実ブラウザーで確認しました。認可境界は、前回BLOCKEDだった項目をユーザーが手動で確認しPASSと報告した結果です。自動ブラウザーE2Eテストは導入していません。
 
+本番環境では2026-09-29に公開URLへアクセスし、HTTPSで表示されること、未ログイン時に`/login`へ遷移すること、ログイン画面とGoogleログインボタンが表示されることを確認しました。
+
 ## 今後の改善
 
-- 本番環境へのデプロイと本番用オブジェクトストレージの選定
 - ブラウザーE2Eの自動化
 - マジックバイト検査やウイルススキャンなど、ファイル内容の検査
 - Task・Materialの検索やフィルタリング
