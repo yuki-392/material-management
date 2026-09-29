@@ -17,6 +17,7 @@ const authorization = createAuthorizationHelpers({
 
 export const {
   requireUser,
+  requireProfileCompleteUser,
   requireLabMember,
   requireLabOwner,
 } = authorization;

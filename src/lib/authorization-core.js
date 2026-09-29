@@ -30,7 +30,9 @@ const errorDetails = {
  *   },
  *   labMember: {
  *     findUnique: (args: {
- *       where: { labId_userId: { labId: string, userId: string } },
+ *       where:
+ *         | { labId_userId: { labId: string, userId: string } }
+ *         | { userId: string },
  *       select: { labId: true }
  *     }) => Promise<{ labId: string } | null>
  *   },
@@ -92,6 +94,12 @@ export function createAuthorizationHelpers({ getSession, db }) {
     }
 
     return { id: userId };
+  }
+
+  async function requireProfileCompleteUser() {
+    const user = await requireUser();
+    await requireCompleteProfile(user.id);
+    return user;
   }
 
   async function requireCompleteProfile(userId) {
@@ -156,5 +164,10 @@ export function createAuthorizationHelpers({ getSession, db }) {
     return { userId: user.id, labId };
   }
 
-  return { requireUser, requireLabMember, requireLabOwner };
+  return {
+    requireUser,
+    requireProfileCompleteUser,
+    requireLabMember,
+    requireLabOwner,
+  };
 }

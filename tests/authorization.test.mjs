@@ -29,6 +29,12 @@ function createFixture({
     labMember: {
       async findUnique(args) {
         calls.push({ model: "labMember", args });
+        if ("userId" in args.where) {
+          return membership?.userId === args.where.userId
+            ? { labId: membership.labId }
+            : null;
+        }
+
         const key = args.where.labId_userId;
         return membership?.labId === key.labId && membership?.userId === key.userId
           ? { labId: membership.labId }
@@ -64,6 +70,35 @@ test("requireUser rejects a request without an authenticated session", async () 
 
   await assert.rejects(helpers.requireUser(), hasCode("UNAUTHENTICATED"));
   assert.deepEqual(calls, []);
+});
+
+test("requireProfileCompleteUser returns the session user after checking the profile", async () => {
+  const { helpers, calls } = createFixture();
+
+  assert.deepEqual(await helpers.requireProfileCompleteUser(), { id: "user-1" });
+  assert.deepEqual(calls[0], {
+    model: "user",
+    args: {
+      where: { id: "user-1" },
+      select: { userType: true, studentNumber: true },
+    },
+  });
+});
+
+test("requireProfileCompleteUser rejects unauthenticated and incomplete users", async () => {
+  const unauthenticated = createFixture({ session: null });
+  await assert.rejects(
+    unauthenticated.helpers.requireProfileCompleteUser(),
+    hasCode("UNAUTHENTICATED"),
+  );
+
+  const incomplete = createFixture({
+    profile: { userType: "STUDENT", studentNumber: null },
+  });
+  await assert.rejects(
+    incomplete.helpers.requireProfileCompleteUser(),
+    hasCode("PROFILE_INCOMPLETE"),
+  );
 });
 
 test("requireLabMember checks the session user and only selects the membership labId", async () => {
