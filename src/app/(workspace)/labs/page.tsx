@@ -118,6 +118,12 @@ export default async function LabsPage() {
             </dd>
           </div>
         </dl>
+        <Link
+          className="mt-5 inline-flex min-h-10 items-center rounded-lg border border-indigo-200 px-4 py-2 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+          href={`/labs/${encodeURIComponent(lab.id)}/tasks`}
+        >
+          Taskを開く
+        </Link>
       </section>
 
       <section
