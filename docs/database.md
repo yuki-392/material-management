@@ -1,8 +1,8 @@
 # DB設計案
 
-更新日: 2026-09-28
+更新日: 2026-09-29
 
-状態: 初期設計案
+状態: 実装中の設計
 
 ## 設計方針
 
@@ -10,7 +10,7 @@
 - 認証ユーザーとアプリの権限データを同じDBに置く。Google OAuthのUser/Account/SessionはAuth.js Prisma Adapterのモデルに合わせる。
 - Labには複数Userが所属できるが、Userの所属Labは最大1つとする。`joinedAt` など所属自体の情報を持たせるため、明示的な `LabMember` を残す。
 - 外部キーで存在する行を保証し、複合主キー・一意制約で重複を防ぐ。Lab所属やOwner確認は、すべてのサーバー側読み書きでも検証する。
-- 不要な履歴テーブル、ロール階層、ソフト削除、資料メタデータはMVPに追加しない。
+- 不要な履歴テーブル、ロール階層、ソフト削除、資料履歴はMVPに追加しない。
 
 ## ER図
 
@@ -21,6 +21,8 @@ erDiagram
     Lab ||--o{ LabMember : includes
     Lab ||--o{ Task : contains
     User o|--o{ Task : assigned_to
+    Lab ||--o{ Material : stores
+    User o|--o{ Material : uploaded_by
     User ||--o{ Account : authenticates_with
     User ||--o{ Session : has
 ```
@@ -71,11 +73,9 @@ Adapterモデルは公式のPrisma Adapterスキーマに合わせる。
 - Labのタスク一覧をLab・状態・締切で絞り込めるよう、`[labId, status, dueAt]` の複合インデックスを置く。
 - `assigneeId` はUserへの任意外部キー。担当者候補がそのLabの `LabMember` であることは、タスクの作成・更新処理で確認する。
 
-### Material（追加候補・未実装）
+### Material
 
-現在の [`docs/requirements.md`](requirements.md) では資料アップロードをMVP対象外としている。この節は将来追加する場合のDB設計案であり、現行のPrisma schemaやmigrationにはまだ含めない。
-
-ファイル本体はPostgreSQLに保存せず、非公開のS3互換オブジェクトストレージに置く。PostgreSQLには資料の表示・認可に必要なメタデータと、ストレージ上のオブジェクトを特定するキーを保存する。ストレージの接続先やバケット名は環境設定で持ち、DBには公開URLを保存しない。
+`Material` は資料のメタデータだけをPostgreSQLに保存する。ファイル本体はprivateなS3互換ストレージへ置き、ローカル開発ではSeaweedFSを使う。DBには公開URLを保存しない。
 
 ```mermaid
 erDiagram
@@ -83,7 +83,7 @@ erDiagram
     User o|--o{ Material : uploaded_by
 ```
 
-提案する `Material` のフィールドは次の通り。
+`Material` のフィールドは次の通り。
 
 | フィールド | 型・必須性 | 用途 |
 | --- | --- | --- |
@@ -95,27 +95,27 @@ erDiagram
 | `storageKey` | 必須・一意 | サーバーが生成するストレージ内のオブジェクト識別子 |
 | `contentType` | 必須 | 検証済みのメディアタイプ |
 | `sizeBytes` | 必須 | ファイルサイズ（byte）。想定する20MiB上限ならPostgreSQL `Int` の範囲内 |
-| `uploadedById` | nullable | 登録したUser。User削除後も資料を残せるよう `SetNull` を提案 |
+| `uploaderId` | nullable | 登録したUser。User削除後も資料を残せるよう `SetNull` |
 | `createdAt` / `updatedAt` | 必須 | 登録・更新日時 |
 
-`Lab` は複数の `Material` を持ち、各 `Material` は必ず1つのLabに属する。`User` は複数資料を登録でき、各資料の登録者は0人または1人とする。アップロード時には登録者を設定するが、将来Userを削除してもLab資料を保つため、DB上の `uploadedById` はnullableにする案。
+`Lab` は複数の `Material` を持ち、各 `Material` は必ず1つのLabに属する。`User` は複数資料を登録でき、各資料の登録者は0人または1人とする。アップロード時にはセッション由来の登録者を設定するが、将来Userを削除してもLab資料を保つため、DB上の `uploaderId` はnullableにする。
 
-提案する制約と削除動作:
+制約と削除動作:
 
 - `Material.labId` は `Lab.id` への必須外部キー。`onDelete: Restrict` とし、資料が残るLabの削除をDBでも拒否する。外部ストレージのファイルまでDBのCascadeだけで消せず、孤立ファイルを作るため。
-- `Material.uploadedById` は `User.id` への任意外部キー。`onDelete: SetNull` とし、登録者Userが削除されても資料とファイルを残す。
+- `Material.uploaderId` は `User.id` への任意外部キー。`onDelete: SetNull` とし、登録者Userが削除されても資料とファイルを残す。
 - `storageKey` は一意にする。元ファイル名は利用者入力で重複し得るため一意にしない。
-- Lab内一覧用に `[labId, createdAt]`、登録者から資料を検索・参照解除する用途に `[uploadedById]` のindexを置く。
+- Lab内一覧用に `[labId, createdAt]`、登録者から資料を検索・参照解除する用途に `[uploaderId]` のindexを置く。
 - ファイル本体、バケット、ストレージ事業者、ダウンロードURLはDB列にしない。単一バケットを使う初期構成では、事業者を示す列を先回りして追加しない。
 
 DB制約とアプリ側処理の境界:
 
-- `labId` 外部キーはLabの存在を保証するが、アクセス権は保証しない。資料の一覧、プレビュー、ダウンロード、説明編集、削除の各サーバー処理で、セッションUserが対象Labの `LabMember` であることを毎回確認する。全メンバーに同じ資料操作を許す案。
-- 20MiB上限、許可するファイル形式、Content-Typeの検証はDB制約にせず、アップロード処理で検証する。クライアント申告のContent-Typeだけを信用せず、必要に応じてファイル内容も確認する。
+- `labId` 外部キーはLabの存在を保証するが、アクセス権は保証しない。資料の一覧、取得、削除の各サーバー処理で、セッションUserが対象Labの `LabMember` であることを毎回確認する。全メンバーに同じ資料操作を許す。
+- 20MiB上限、許可形式、拡張子とContent-Typeの照合はDB制約にせず、アップロード処理で検証する。この照合だけではファイル内容や安全性を完全には保証しない。
 - アップロードでは、サーバー生成キーでストレージに保存してからDBレコードを作る。DB登録に失敗したら、保存したオブジェクトを可能な範囲で補償削除する。
-- 削除では、ストレージ上のオブジェクトを削除してからDB行を削除する。ストレージ削除に失敗した場合はDB行を残し、再試行できるようにする。オブジェクトストレージとPostgreSQLをまたぐ単一トランザクションはないため、ストレージ削除後にDB削除だけが失敗する可能性は残る。再試行時にオブジェクトが既にない状態を成功として扱えるようにする。
+- 削除では、ストレージ上のオブジェクトを削除してからDB行を削除する。ストレージ削除に失敗した場合はDB行を残し、再試行できるようにする。オブジェクトストレージとPostgreSQLをまたぐ単一トランザクションはないため、ストレージ削除後にDB削除だけが失敗する可能性は残る。S3のDeleteObjectは同じキーの再削除を許容するため、再試行でDB行を削除できる。
 
-この案では別のアップロード状態モデルやファイル履歴モデルを追加しない。孤立オブジェクトの自動検出・再試行が必要になった時点で、運用要件を確認してから別途設計する。
+別のアップロード状態モデルやファイル履歴モデルは追加しない。孤立オブジェクトの自動検出・再試行が必要になった時点で、運用要件を確認してから別途設計する。
 
 ## 関係・制約の整理
 
@@ -126,6 +126,8 @@ DB制約とアプリ側処理の境界:
 | User → 所有Lab | アプリ上は0または1 | `Lab.ownerId` 外部キー。OwnerもMemberになる作成トランザクションと `LabMember.userId` unique制約で保証 |
 | Lab → Task | 1対多 | `Task.labId` 外部キー |
 | User → 担当Task | 1対多（Task側は任意） | `Task.assigneeId` nullable外部キー |
+| Lab → Material | 1対多 | `Material.labId` 必須外部キー、`Restrict` |
+| User → 登録Material | 1対多（Material側は任意） | `Material.uploaderId` nullable外部キー、`SetNull` |
 | User → OAuth Account / Session | 1対多 | Auth.js Adapterの外部キー |
 
 主な一意制約は `User.email`、`User.studentNumber`、`LabMember[labId, userId]` の複合主キー、`LabMember.userId`、`Account[provider, providerAccountId]`、`Session.sessionToken`。`LabMember.userId` uniqueは複合主キーより強い所属上限を表す。同じ値の `@@unique([labId, userId])` は重ねない。
@@ -139,6 +141,8 @@ DB制約とアプリ側処理の境界:
 | `LabMember.userId` → `User.id` | `Cascade` | User削除時に所属行を残さない。ただしOwnerの削除は上記FKで拒否される。 |
 | `Task.labId` → `Lab.id` | `Cascade` | Lab削除時に属するTaskを孤立させない。 |
 | `Task.assigneeId` → `User.id` | `SetNull` | 担当Userを削除してもTaskは保持し、担当だけ解除する。 |
+| `Material.labId` → `Lab.id` | `Restrict` | ストレージのファイルをDBのCascadeでは削除できないため、Materialが残るLabの削除を拒否する。 |
+| `Material.uploaderId` → `User.id` | `SetNull` | 登録者Userが削除されてもMaterialと外部ファイルを保持する。 |
 | Auth.js `Account.userId` / `Session.userId` → `User.id` | `Cascade` | User削除時にOAuth連携・セッションを残さない。 |
 
 TaskからLabMemberへの外部キーは設けず、Taskの担当者はUserを参照する。したがってDB外部キーだけでは「担当者が当該Labのメンバーであること」までは表現しない。タスク作成・更新時に、サーバーが `LabMember(labId, assigneeId)` を照会して保証する。これは単純なMVPモデルを保ちつつ、認可ルールをすべての更新処理で明示する設計。

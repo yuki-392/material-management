@@ -1,7 +1,7 @@
 # MVP要件
 
-更新日: 2026-09-27  
-状態: 初期設計案
+更新日: 2026-09-29
+状態: MVP実装中
 
 ## 目的
 
@@ -38,6 +38,16 @@
 - Labメンバー全員が、同じLab内のすべてのタスクを閲覧・作成・編集・完全削除できる。作成者や担当者だけに編集権限を絞らない。
 - メンバーをLabから削除すると、そのユーザーが担当するタスクは残し、担当者だけを解除する。所属削除と担当解除は同一トランザクションで行う。
 
+### 資料
+
+- Labメンバー全員が、そのLab専用の資料をアップロード・一覧・表示・ダウンロード・削除できる。Owner限定にはしない。
+- ファイル本体はPostgreSQLに保存せず、ローカル開発ではSeaweedFSのprivateなS3互換ストレージに保存する。PostgreSQLにはタイトル、説明、元ファイル名、storage key、形式、サイズ、登録者、日時を保存する。
+- 1ファイルは20MiB以下とし、PDF、DOCX、PPTX、XLSX、JPEG、PNGだけを受け付ける。サーバーで拡張子とMIME typeを照合する。これはファイル内容の安全性を完全に証明する検査ではない。
+- Server Actionの既定本文上限はファイル上限より小さいため、Next.jsの `serverActions.bodySizeLimit` を21MiBにする。これは20MiBのファイルとmultipart本文の小さなオーバーヘッドを受けるための設定。
+- PDFとJPEG/PNGはLabメンバー認可済みRoute Handlerからinline配信し、Office形式は添付ダウンロードにする。S3 endpointをブラウザーへ公開しない。
+- ストレージキーはサーバーで生成する。削除時はストレージ削除後にDBメタデータを削除し、ストレージ削除に失敗した場合はDB行を残す。DB登録失敗時はアップロード済みオブジェクトの補償削除を試す。
+- Lab削除と本番用ストレージ構成、ウイルススキャン、ファイル検索、Officeプレビュー、版管理はMVPに含めない。
+
 ## 認証・認可の境界
 
 | 操作 | 必要な条件 |
@@ -48,12 +58,13 @@
 | Taskの作成・更新・削除 | プロフィール完了、対象Labの `LabMember` |
 | Taskの担当者設定 | 対象Labの `LabMember`。担当者も同じLabの `LabMember` |
 | メンバー追加・削除 | 対象LabのOwner |
+| Materialの一覧・アップロード・取得・削除 | 対象Labの `LabMember` |
 
 すべての条件はサーバー側の読み取り・更新処理で確認する。UIでの表示制御は操作しやすさのための補助であり、認可の代わりにはならない。Server ActionsとRoute Handlersも公開リクエストの入口として扱い、それぞれで認証・認可を確認する。
 
 ## MVP対象外
 
-- 資料アップロード・共有、コメント、通知、検索
+- コメント、通知、検索
 - 招待メール、招待コード、自由参加
 - Google以外のOAuthプロバイダー、アプリ独自パスワード認証
 - 教員・学生による権限差、複数の操作ロール、Owner移譲
@@ -76,7 +87,9 @@ src/
     (workspace)/labs/page.tsx
     (workspace)/labs/[labId]/page.tsx
     (workspace)/labs/[labId]/tasks/page.tsx
+    (workspace)/labs/[labId]/materials/page.tsx
     api/auth/[...nextauth]/route.ts
+    api/labs/[labId]/materials/[materialId]/file/route.ts
     layout.tsx
   components/
   lib/
@@ -94,7 +107,7 @@ src/
 - **Prisma ORM 7 + PostgreSQL**：現行のPrisma公式Auth.js連携ガイドがORM 7を使い、ORM 8向けガイドは未提供と説明しているため、Adapter互換手順が整うまではORM 7を初期値とする。PostgreSQL接続のドライバーアダプター依存はORMガイドに沿って設定する。
 - **パスワードハッシュライブラリなし**：Google OAuthのみなので、アプリがパスワードを受け取ったり保存したりしない。
 - **Zodなし（初期段階）**：入力項目が少ない間は、FormDataをサーバー側の小さな検証関数で検証する。型の実行時検証が複数画面で重複し始めたらZodを再検討する。
-- **状態管理、tRPC、ファイル保存、メール、通知ライブラリなし**：対応するMVP機能がないため、必要性が出るまで追加しない。
+- **状態管理、tRPC、メール、通知ライブラリなし**：対応するMVP機能がないため、必要性が出るまで追加しない。資料のローカル保存にはSeaweedFSを使い、アプリからのS3互換接続には `@aws-sdk/client-s3` を使う。Presigned URLや本番ストレージ用ライブラリは追加しない。
 
 関連資料: [Next.js Authentication](https://nextjs.org/docs/app/guides/authentication)、[Prisma Auth.js + Next.js](https://www.prisma.io/docs/guides/authentication/authjs/nextjs)。
 
@@ -114,6 +127,7 @@ src/
 12. タスク作成・編集・状態変更・担当・締切設定を実装する。
 13. 全メンバー向けタスク完全削除、サーバー側入力検証、エラー表示を実装する。
 14. 認証・プロフィール・Lab境界・Owner権限・担当者制約・削除動作のテストを追加・実行する。
+15. Labメンバー向け資料アップロード、一覧、認可付き取得、削除をSeaweedFSで実装する。
 
 ## 受け入れ確認シナリオ
 
@@ -129,6 +143,7 @@ src/
 - 同一の `(labId, userId)` を持つLabMemberをDBに二重登録できない。
 - 同一Userを別LabのLabMemberに登録できない一方、別Userは同じLabに所属できる。
 - タスク削除後、対象タスクは存在しない。Lab削除はUI対象外だが、DBの参照動作は `docs/database.md` に記載された通りである。
+- Labメンバーは自Labの資料だけを扱え、別LabのMaterial IDを指定しても資料の有無を確認できない。ストレージ削除失敗時はMaterial行が残る。
 
 ## 設計理解の確認質問
 

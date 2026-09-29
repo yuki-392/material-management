@@ -32,6 +32,7 @@ model User {
   ownedLabs     Lab[]       @relation("LabOwner")
   memberships   LabMember[]
   assignedTasks Task[]
+  materials     Material[]  @relation("MaterialUploader")
 }
 
 model Account {
@@ -80,9 +81,10 @@ model Lab {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner   User        @relation("LabOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  members LabMember[]
-  tasks   Task[]
+  owner     User        @relation("LabOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members   LabMember[]
+  tasks     Task[]
+  materials Material[]
 
   @@index([ownerId])
 }
@@ -114,4 +116,24 @@ model Task {
 
   @@index([assigneeId])
   @@index([labId, status, dueAt])
+}
+
+model Material {
+  id               String   @id @default(cuid())
+  labId            String
+  title            String
+  description      String?
+  originalFileName String
+  storageKey       String   @unique
+  contentType      String
+  sizeBytes        Int
+  uploaderId       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  lab      Lab   @relation(fields: [labId], references: [id], onDelete: Restrict)
+  uploader User? @relation("MaterialUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+
+  @@index([labId, createdAt])
+  @@index([uploaderId])
 }
