@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import {
@@ -9,6 +8,13 @@ import { getMissingAuthEnvironmentVariables } from "@/lib/auth-environment.js";
 import { prisma } from "@/lib/db";
 import { listTasksForLab } from "@/lib/task-core.js";
 import { formatTokyoDateTimeLocal } from "@/lib/task-validation.js";
+import {
+  ButtonLink,
+  Card,
+  EmptyState,
+  PageHeader,
+  TaskStatusBadge,
+} from "@/components/ui";
 
 import {
   CreateTaskForm,
@@ -17,12 +23,6 @@ import {
   type EditableTask,
   type TaskFormMember,
 } from "./task-forms";
-
-const statusLabels = {
-  TODO: "TODO",
-  IN_PROGRESS: "進行中",
-  DONE: "完了",
-} as const;
 
 export default async function LabTasksPage({
   params,
@@ -91,53 +91,61 @@ export default async function LabTasksPage({
   }));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Link
-          className="text-sm font-medium text-indigo-700 hover:text-indigo-900"
-          href="/labs"
-        >
-          ← Labに戻る
-        </Link>
-        <p className="mt-4 text-sm font-semibold text-indigo-700">{lab.name}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
-          Task一覧
-        </h1>
-      </div>
+    <div className="space-y-7 sm:space-y-8">
+      <PageHeader
+        eyebrow={lab.name}
+        title="Task"
+        description="担当者・締切・進捗を確認し、Lab内の作業を管理します。"
+        actions={
+          <ButtonLink href="/labs" variant="secondary">
+            Labへ戻る
+          </ButtonLink>
+        }
+      />
 
-      <section
-        aria-labelledby="create-task-heading"
-        className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
-      >
-        <h2
-          className="text-lg font-bold text-slate-900"
-          id="create-task-heading"
-        >
-          Taskを作成
-        </h2>
-        <CreateTaskForm labId={access.labId} members={members} />
-      </section>
-
-      <section
-        aria-labelledby="task-list-heading"
-        className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
-      >
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <Card aria-labelledby="create-task-heading" id="create-task">
+        <div>
+          <p className="text-sm font-semibold text-indigo-700">新しい作業</p>
           <h2
-            className="text-lg font-bold text-slate-900"
+            className="mt-1 text-xl font-bold text-slate-950"
+            id="create-task-heading"
+          >
+            Taskを作成
+          </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            作成後も、Labメンバー全員が内容を編集できます。
+          </p>
+        </div>
+        <CreateTaskForm labId={access.labId} members={members} />
+      </Card>
+
+      <Card aria-labelledby="task-list-heading">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2
+            className="text-xl font-bold text-slate-950"
             id="task-list-heading"
           >
-            Task一覧
+            登録済みTask
           </h2>
-          <p className="text-sm text-slate-500">{tasks.length}件</p>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold tabular-nums text-slate-700">
+            {tasks.length}件
+          </span>
         </div>
 
         {tasks.length === 0 ? (
-          <p className="mt-5 rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
-            Taskはまだありません。上のフォームから作成できます。
-          </p>
+          <div className="mt-5">
+            <EmptyState
+              title="Taskはまだありません"
+              description="最初のTaskを作成して、担当者や締切を共有しましょう。"
+              action={
+                <ButtonLink href="#create-task" variant="secondary">
+                  作成フォームへ
+                </ButtonLink>
+              }
+            />
+          </div>
         ) : (
-          <ul className="mt-4 divide-y divide-slate-200">
+          <ul className="mt-5 divide-y divide-slate-200 border-y border-slate-200">
             {tasks.map((task, index) => {
               const editableTask = editableTasks[index];
               const assignee = task.assignee
@@ -147,15 +155,13 @@ export default async function LabTasksPage({
                 : null;
 
               return (
-                <li className="py-5" key={task.id}>
+                <li className="py-5 sm:py-6" key={task.id}>
                   <article>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="min-w-0 flex-1 break-words font-semibold text-slate-900">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <h3 className="min-w-0 break-words text-lg font-semibold text-slate-950">
                         {task.title}
                       </h3>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-                        {statusLabels[task.status]}
-                      </span>
+                      <TaskStatusBadge status={task.status} />
                     </div>
 
                     {task.description ? (
@@ -164,16 +170,18 @@ export default async function LabTasksPage({
                       </p>
                     ) : null}
 
-                    <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                      <div className="flex gap-2">
-                        <dt className="font-medium text-slate-700">担当</dt>
-                        <dd className="text-slate-600">
+                    <dl className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-3 text-sm sm:grid-cols-2 sm:p-4">
+                      <div className="min-w-0">
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          担当者
+                        </dt>
+                        <dd className="mt-1 break-words font-medium text-slate-800">
                           {assignee ?? "未設定"}
                         </dd>
                       </div>
-                      <div className="flex gap-2">
-                        <dt className="font-medium text-slate-700">締切</dt>
-                        <dd className="text-slate-600">
+                      <div className="min-w-0">
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">締切</dt>
+                        <dd className="mt-1 font-medium text-slate-800">
                           {task.dueAt
                             ? new Intl.DateTimeFormat("ja-JP", {
                                 dateStyle: "medium",
@@ -185,8 +193,8 @@ export default async function LabTasksPage({
                       </div>
                     </dl>
 
-                    <details className="mt-4 rounded-lg border border-slate-200 px-4 py-3">
-                      <summary className="cursor-pointer text-sm font-medium text-indigo-700">
+                    <details className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 open:bg-slate-50/60">
+                      <summary className="cursor-pointer rounded text-sm font-semibold text-indigo-800 marker:text-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600">
                         編集
                       </summary>
                       <EditTaskForm
@@ -196,7 +204,7 @@ export default async function LabTasksPage({
                       />
                     </details>
 
-                    <div className="mt-3">
+                    <div className="mt-3 flex justify-end">
                       <DeleteTaskForm
                         labId={access.labId}
                         taskId={task.id}
@@ -209,7 +217,7 @@ export default async function LabTasksPage({
             })}
           </ul>
         )}
-      </section>
+      </Card>
     </div>
   );
 }

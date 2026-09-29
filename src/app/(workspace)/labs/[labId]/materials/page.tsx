@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import {
@@ -7,6 +6,13 @@ import {
 } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
 import { listLabMaterials } from "@/lib/material-core.js";
+import {
+  ButtonLink,
+  Card,
+  EmptyState,
+  PageHeader,
+  getButtonClassName,
+} from "@/components/ui";
 import { MaterialUploadForm, DeleteMaterialForm } from "./material-forms";
 
 export default async function MaterialsPage({
@@ -40,47 +46,59 @@ export default async function MaterialsPage({
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-indigo-700">Lab資料</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
-            資料
-          </h1>
-        </div>
-        <Link
-          className="text-sm font-medium text-indigo-700 underline decoration-indigo-300 underline-offset-4 hover:text-indigo-900"
-          href="/labs"
+    <div className="space-y-7 sm:space-y-8">
+      <PageHeader
+        eyebrow="資料管理"
+        title="資料"
+        description="Lab内で共有する研究資料をアップロードして管理します。"
+        actions={
+          <ButtonLink href="/labs" variant="secondary">
+            Labへ戻る
+          </ButtonLink>
+        }
+      />
+
+      <Card aria-labelledby="material-upload-heading" id="material-upload">
+        <p className="text-sm font-semibold text-indigo-700">ファイル共有</p>
+        <h2
+          className="mt-1 text-xl font-bold text-slate-950"
+          id="material-upload-heading"
         >
-          Labへ戻る
-        </Link>
-      </div>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <h2 className="text-lg font-bold text-slate-900">資料を追加</h2>
+          資料を追加
+        </h2>
+        <p className="mt-1 text-sm leading-6 text-slate-600">
+          対応形式はPDF、DOCX、PPTX、XLSX、JPEG、PNGです。
+        </p>
         <MaterialUploadForm labId={access.labId} />
-      </section>
+      </Card>
 
-      <section
-        aria-labelledby="materials-list-heading"
-        className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
-      >
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <Card aria-labelledby="materials-list-heading">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <h2
-            className="text-lg font-bold text-slate-900"
+            className="text-xl font-bold text-slate-950"
             id="materials-list-heading"
           >
             登録済み資料
           </h2>
-          <p className="text-sm text-slate-500">{materials.length}件</p>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold tabular-nums text-slate-700">
+            {materials.length}件
+          </span>
         </div>
 
         {materials.length === 0 ? (
-          <p className="mt-5 rounded-lg bg-slate-50 px-4 py-5 text-sm text-slate-600">
-            まだ資料はありません。
-          </p>
+          <div className="mt-5">
+            <EmptyState
+              title="まだ資料はありません"
+              description="最初の資料を登録すると、Labメンバーが認証付きで閲覧・ダウンロードできます。"
+              action={
+                <ButtonLink href="#material-upload" variant="secondary">
+                  資料の登録へ
+                </ButtonLink>
+              }
+            />
+          </div>
         ) : (
-          <ul className="mt-4 divide-y divide-slate-200">
+          <ul className="mt-5 divide-y divide-slate-200 border-y border-slate-200">
             {materials.map((material) => {
               const fileUrl = `/api/labs/${encodeURIComponent(access.labId)}/materials/${encodeURIComponent(material.id)}/file`;
               const inline = [
@@ -94,31 +112,72 @@ export default async function MaterialsPage({
                 "登録者不明";
 
               return (
-                <li className="py-5" key={material.id}>
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <li className="py-5 sm:py-6" key={material.id}>
+                  <article className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8">
                     <div className="min-w-0">
-                      <h3 className="break-words font-semibold text-slate-900">
-                        {material.title}
-                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="break-words text-lg font-semibold text-slate-950">
+                          {material.title}
+                        </h3>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+                          {getFileTypeLabel(material.contentType)}
+                        </span>
+                      </div>
                       {material.description ? (
                         <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-600">
                           {material.description}
                         </p>
                       ) : null}
-                      <p className="mt-2 break-all text-sm text-slate-600">
+                      <p className="mt-2 break-all text-sm font-medium text-slate-700">
                         {material.originalFileName}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {material.contentType} · {formatFileSize(material.sizeBytes)} · {uploaderName} · {formatDate(material.createdAt)}
-                      </p>
+                      <dl className="mt-3 grid gap-x-6 gap-y-2 rounded-xl bg-slate-50 p-3 text-sm sm:grid-cols-2 sm:p-4 xl:grid-cols-4">
+                        <div className="min-w-0">
+                          <dt className="text-xs font-semibold text-slate-500">
+                            ファイル形式
+                          </dt>
+                          <dd className="mt-1 break-all font-medium text-slate-800">
+                            {material.contentType}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs font-semibold text-slate-500">
+                            サイズ
+                          </dt>
+                          <dd className="mt-1 font-medium tabular-nums text-slate-800">
+                            {formatFileSize(material.sizeBytes)}
+                          </dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-xs font-semibold text-slate-500">
+                            登録者
+                          </dt>
+                          <dd className="mt-1 break-words font-medium text-slate-800">
+                            {uploaderName}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs font-semibold text-slate-500">
+                            登録日時
+                          </dt>
+                          <dd className="mt-1 font-medium text-slate-800">
+                            {formatDate(material.createdAt)}
+                          </dd>
+                        </div>
+                      </dl>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                       <a
-                        className="inline-flex min-h-10 items-center rounded-lg border border-indigo-200 px-3 py-2 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                        className={getButtonClassName("secondary", "min-h-10")}
                         href={fileUrl}
                         rel={inline ? "noreferrer" : undefined}
                         target={inline ? "_blank" : undefined}
+                        aria-label={
+                          inline
+                            ? `${material.title}を新しいタブで開く`
+                            : `${material.title}をダウンロード`
+                        }
                       >
                         {inline ? "開く" : "ダウンロード"}
                       </a>
@@ -128,15 +187,30 @@ export default async function MaterialsPage({
                         title={material.title}
                       />
                     </div>
-                  </div>
+                  </article>
                 </li>
               );
             })}
           </ul>
         )}
-      </section>
+      </Card>
     </div>
   );
+}
+
+function getFileTypeLabel(contentType: string) {
+  const labels: Record<string, string> = {
+    "application/pdf": "PDF",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      "PowerPoint",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      "Excel",
+    "image/jpeg": "JPEG画像",
+    "image/png": "PNG画像",
+  };
+
+  return labels[contentType] ?? "ファイル";
 }
 
 function formatFileSize(sizeBytes: number) {

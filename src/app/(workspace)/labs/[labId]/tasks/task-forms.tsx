@@ -13,6 +13,14 @@ import {
   deleteTaskAction,
   updateTaskAction,
 } from "./actions";
+import {
+  Button,
+  FieldError,
+  FormError,
+  inputClassName,
+  selectClassName,
+  textareaClassName,
+} from "@/components/ui";
 
 export type TaskFormMember = {
   id: string;
@@ -46,13 +54,9 @@ export function CreateTaskForm({
       <input name="labId" type="hidden" value={labId} />
       <TaskFields members={members} state={state} />
       {state.formError ? <FormError message={state.formError} /> : null}
-      <button
-        className="min-h-11 rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={isPending}
-        type="submit"
-      >
+      <Button disabled={isPending} type="submit">
         {isPending ? "作成中…" : "Taskを作成"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -77,13 +81,9 @@ export function EditTaskForm({
       <input name="taskId" type="hidden" value={task.id} />
       <TaskFields members={members} state={state} task={task} />
       {state.formError ? <FormError message={state.formError} /> : null}
-      <button
-        className="min-h-10 rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={isPending}
-        type="submit"
-      >
+      <Button disabled={isPending} type="submit">
         {isPending ? "保存中…" : "変更を保存"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -112,13 +112,9 @@ export function DeleteTaskForm({
     <form action={formAction} onSubmit={confirmDeletion}>
       <input name="labId" type="hidden" value={labId} />
       <input name="taskId" type="hidden" value={taskId} />
-      <button
-        className="min-h-10 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={isPending}
-        type="submit"
-      >
+      <Button disabled={isPending} type="submit" variant="danger">
         {isPending ? "削除中…" : "Taskを削除"}
-      </button>
+      </Button>
       {state.formError ? <FormError message={state.formError} /> : null}
     </form>
   );
@@ -147,7 +143,7 @@ function TaskFields({
         <input
           aria-describedby={errorId(prefix, "title", state)}
           aria-invalid={Boolean(state.fieldErrors?.title)}
-          className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
+          className={inputClassName}
           defaultValue={task?.title ?? ""}
           id={`${prefix}-title`}
           maxLength={200}
@@ -167,7 +163,7 @@ function TaskFields({
         <textarea
           aria-describedby={errorId(prefix, "description", state)}
           aria-invalid={Boolean(state.fieldErrors?.description)}
-          className="mt-2 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
+          className={textareaClassName}
           defaultValue={task?.description ?? ""}
           id={`${prefix}-description`}
           maxLength={5000}
@@ -191,7 +187,7 @@ function TaskFields({
           <select
             aria-describedby={errorId(prefix, "status", state)}
             aria-invalid={Boolean(state.fieldErrors?.status)}
-            className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
+            className={selectClassName}
             defaultValue={task.status}
             id={`${prefix}-status`}
             name="status"
@@ -222,7 +218,7 @@ function TaskFields({
         <select
           aria-describedby={errorId(prefix, "assigneeId", state)}
           aria-invalid={Boolean(state.fieldErrors?.assigneeId)}
-          className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
+          className={selectClassName}
           defaultValue={task?.assigneeId ?? ""}
           id={`${prefix}-assignee`}
           name="assigneeId"
@@ -250,7 +246,7 @@ function TaskFields({
         <input
           aria-describedby={errorId(prefix, "dueAt", state)}
           aria-invalid={Boolean(state.fieldErrors?.dueAt)}
-          className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
+          className={inputClassName}
           defaultValue={task?.dueAtLocal ?? ""}
           id={`${prefix}-due-at`}
           name="dueAt"
@@ -272,20 +268,4 @@ function errorId(
   state: TaskFormState,
 ) {
   return state.fieldErrors?.[field] ? `${prefix}-${field}-error` : undefined;
-}
-
-function FieldError({ id, message }: { id: string; message?: string }) {
-  return message ? (
-    <p className="mt-1 text-sm text-red-700" id={id}>
-      {message}
-    </p>
-  ) : null;
-}
-
-function FormError({ message }: { message: string }) {
-  return (
-    <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800" role="alert">
-      {message}
-    </p>
-  );
 }

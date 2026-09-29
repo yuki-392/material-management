@@ -1,13 +1,19 @@
 "use client";
 
 import { useActionState } from "react";
-import Link from "next/link";
 
 import { createLabAction } from "./actions";
 import {
   initialLabActionState,
   type LabActionState,
 } from "@/lib/lab-form-state";
+import {
+  Button,
+  ButtonLink,
+  FieldError,
+  FormError,
+  inputClassName,
+} from "@/components/ui";
 
 export function LabForm() {
   const [state, formAction, isPending] = useActionState<
@@ -28,39 +34,24 @@ export function LabForm() {
           autoComplete="organization"
           aria-describedby={state.nameError ? "lab-name-error" : undefined}
           aria-invalid={Boolean(state.nameError)}
-          className="mt-2 min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
+          className={inputClassName}
           id="name"
           maxLength={100}
           name="name"
           required
         />
-        {state.nameError ? (
-          <p className="mt-1 text-sm text-red-700" id="lab-name-error">
-            {state.nameError}
-          </p>
-        ) : null}
+        <FieldError id="lab-name-error" message={state.nameError} />
       </div>
 
-      {state.formError ? (
-        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-800" role="alert">
-          {state.formError}
-        </p>
-      ) : null}
+      {state.formError ? <FormError message={state.formError} /> : null}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <button
-          className="min-h-11 rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={isPending}
-          type="submit"
-        >
+        <Button disabled={isPending} type="submit">
           {isPending ? "作成中…" : "Labを作成"}
-        </button>
-        <Link
-          className="min-h-11 rounded-lg px-4 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-          href="/labs"
-        >
+        </Button>
+        <ButtonLink href="/labs" variant="secondary">
           戻る
-        </Link>
+        </ButtonLink>
       </div>
     </form>
   );

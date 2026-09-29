@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 
 import { LabForm } from "./lab-form";
+import { ButtonLink, Card, PageHeader } from "@/components/ui";
 
 export default async function NewLabPage() {
   if (getMissingAuthEnvironmentVariables().includes("AUTH_SECRET")) {
@@ -41,15 +42,20 @@ export default async function NewLabPage() {
   }
 
   return (
-    <section className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      <p className="text-sm font-semibold text-indigo-700">ワークスペース</p>
-      <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
-        Labを作成
-      </h1>
-      <p className="mt-3 text-sm leading-6 text-slate-600">
-        作成したUserがOwnerと最初のメンバーになります。
-      </p>
-      <LabForm />
-    </section>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <PageHeader
+        eyebrow="ワークスペース"
+        title="Labを作成"
+        description="Labを作成すると、あなたがOwner兼最初のメンバーになります。"
+        actions={
+          <ButtonLink href="/labs" variant="secondary">
+            Labへ戻る
+          </ButtonLink>
+        }
+      />
+      <Card>
+        <LabForm />
+      </Card>
+    </div>
   );
 }

@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "研究室タスク管理",
-  description: "研究室・ゼミ内のタスクを管理するアプリです。",
+  description: "研究室・ゼミ内のタスクと資料を管理するアプリです。",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -23,7 +23,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-full flex-col font-sans">
+        <a
+          className="sr-only z-50 rounded-lg bg-white px-4 py-3 font-semibold text-indigo-800 shadow-lg focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+          href="#main-content"
+        >
+          本文へ移動
+        </a>
+        {children}
+      </body>
     </html>
   );
 }
