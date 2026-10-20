@@ -43,3 +43,5 @@ next-env.d.ts
 
 # Prisma Client generated from prisma/schema.prisma
 /src/generated/prisma/
+
+docs/interview-prep.md
