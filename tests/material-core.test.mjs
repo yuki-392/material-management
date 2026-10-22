@@ -46,23 +46,76 @@ function materialRow(overrides = {}) {
   };
 }
 
-test("lists only a Lab's materials in newest-first order", async () => {
-  let query;
+test("searches, filters, and paginates only a Lab's materials", async () => {
+  const calls = [];
   const expected = [materialRow()];
   const db = {
     material: {
+      count: async (args) => {
+        calls.push(["material.count", args]);
+        return 1;
+      },
       findMany: async (args) => {
-        query = args;
+        calls.push(["material.findMany", args]);
         return expected;
       },
     },
   };
 
-  const result = await listLabMaterials(db, { labId: "lab-1" });
+  const result = await listLabMaterials(db, {
+    labId: "lab-1",
+    query: "paper",
+    type: "image",
+    page: 1,
+  });
+  const expectedWhere = {
+    labId: "lab-1",
+    contentType: { in: ["image/jpeg", "image/png"] },
+    OR: [
+      { title: { contains: "paper", mode: "insensitive" } },
+      { description: { contains: "paper", mode: "insensitive" } },
+      { originalFileName: { contains: "paper", mode: "insensitive" } },
+    ],
+  };
 
-  assert.deepEqual(result, expected);
-  assert.deepEqual(query.where, { labId: "lab-1" });
-  assert.deepEqual(query.orderBy, { createdAt: "desc" });
+  assert.deepEqual(result, {
+    items: expected,
+    totalCount: 1,
+    page: 1,
+    pageCount: 1,
+  });
+  assert.deepEqual(calls[0], ["material.count", { where: expectedWhere }]);
+  assert.equal(calls[1][0], "material.findMany");
+  assert.deepEqual(calls[1][1].where, expectedWhere);
+  assert.deepEqual(calls[1][1].orderBy, [
+    { createdAt: "desc" },
+    { id: "desc" },
+  ]);
+  assert.equal(calls[1][1].skip, 0);
+  assert.equal(calls[1][1].take, 20);
+});
+
+test("returns the first empty page when there are no matching materials", async () => {
+  let findManyArgs;
+  const db = {
+    material: {
+      count: async () => 0,
+      findMany: async (args) => {
+        findManyArgs = args;
+        return [];
+      },
+    },
+  };
+
+  const result = await listLabMaterials(db, { labId: "lab-1", page: 5 });
+
+  assert.deepEqual(result, {
+    items: [],
+    totalCount: 0,
+    page: 1,
+    pageCount: 1,
+  });
+  assert.equal(findManyArgs.skip, 0);
 });
 
 test("uploads with a server-created key and the session uploader id", async () => {

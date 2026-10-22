@@ -104,19 +104,81 @@ function expectTaskError(code) {
   return (error) => error instanceof TaskOperationError && error.code === code;
 }
 
-test("lists tasks with a query scoped to the authorized Lab", async () => {
-  const tasks = [
-    { id: "task-1", labId: "lab-1", title: "Own task" },
-    { id: "task-2", labId: "lab-2", title: "Other task" },
-  ];
-  const { db, calls } = createFakeDatabase({ tasks });
+test("searches, filters, and paginates tasks within the authorized Lab", async () => {
+  const calls = [];
+  const expectedTasks = [{ id: "task-21", labId: "lab-1", title: "Own task" }];
+  const db = {
+    task: {
+      async count(args) {
+        calls.push(["task.count", args]);
+        return 23;
+      },
+      async findMany(args) {
+        calls.push(["task.findMany", args]);
+        return expectedTasks;
+      },
+    },
+  };
 
-  const result = await listTasksForLab(db, "lab-1");
+  const result = await listTasksForLab(db, {
+    labId: "lab-1",
+    query: "paper",
+    status: "TODO",
+    assigneeId: "member-1",
+    page: 2,
+  });
 
-  assert.deepEqual(result, [tasks[0]]);
-  assert.equal(calls[0][0], "task.findMany");
-  assert.deepEqual(calls[0][1].where, { labId: "lab-1" });
-  assert.equal(calls[0][1].select.assignee.select.email, true);
+  const expectedWhere = {
+    labId: "lab-1",
+    status: "TODO",
+    assigneeId: "member-1",
+    OR: [
+      { title: { contains: "paper", mode: "insensitive" } },
+      { description: { contains: "paper", mode: "insensitive" } },
+    ],
+  };
+  assert.deepEqual(result, {
+    items: expectedTasks,
+    totalCount: 23,
+    page: 2,
+    pageCount: 2,
+  });
+  assert.deepEqual(calls[0], ["task.count", { where: expectedWhere }]);
+  assert.equal(calls[1][0], "task.findMany");
+  assert.deepEqual(calls[1][1].where, expectedWhere);
+  assert.deepEqual(calls[1][1].orderBy, [
+    { createdAt: "desc" },
+    { id: "desc" },
+  ]);
+  assert.equal(calls[1][1].skip, 20);
+  assert.equal(calls[1][1].take, 20);
+  assert.equal(calls[1][1].select.assignee.select.email, true);
+});
+
+test("filters unassigned tasks and clamps a stale page to the last page", async () => {
+  let findManyArgs;
+  const db = {
+    task: {
+      count: async ({ where }) => {
+        assert.deepEqual(where, { labId: "lab-1", assigneeId: null });
+        return 21;
+      },
+      findMany: async (args) => {
+        findManyArgs = args;
+        return [];
+      },
+    },
+  };
+
+  const result = await listTasksForLab(db, {
+    labId: "lab-1",
+    assigneeId: null,
+    page: 9,
+  });
+
+  assert.equal(result.page, 2);
+  assert.equal(result.pageCount, 2);
+  assert.equal(findManyArgs.skip, 20);
 });
 
 test("creates a Task with no assignee", async () => {

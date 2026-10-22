@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { logMaterialError } from "./material-error-logging.js";
+import { LIST_PAGE_SIZE } from "./list-query.js";
 import {
   StorageQuotaError,
   commitStorageUpload,
@@ -22,6 +23,20 @@ const allowedContentTypes = new Set([
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
 
+const materialTypeContentTypes = {
+  pdf: ["application/pdf"],
+  word: [
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ],
+  powerpoint: [
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ],
+  excel: [
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ],
+  image: ["image/jpeg", "image/png"],
+};
+
 export class MaterialOperationError extends Error {
   /**
    * @param {"NOT_FOUND" | "STORAGE_CONFIGURATION_FAILED" | "STORAGE_UPLOAD_FAILED" | "METADATA_CREATE_FAILED" | "STORAGE_DELETE_FAILED" | "STORAGE_OBJECT_MISSING" | "QUOTA_RESERVATION_FAILED"} code
@@ -35,14 +50,31 @@ export class MaterialOperationError extends Error {
 }
 
 /**
- * Read only this Lab's Material rows, newest first.
+ * Read a filtered page of this Lab's Material rows, newest first.
  * @param {PrismaClient} db
- * @param {{labId: string}} input
+ * @param {{labId: string, query?: string, type?: keyof typeof materialTypeContentTypes, page?: number}} input
  */
-export function listLabMaterials(db, { labId }) {
-  return db.material.findMany({
-    where: { labId },
-    orderBy: { createdAt: "desc" },
+export async function listLabMaterials(db, input) {
+  const where = { labId: input.labId };
+  if (input.type) {
+    where.contentType = { in: materialTypeContentTypes[input.type] };
+  }
+  if (input.query) {
+    where.OR = [
+      { title: { contains: input.query, mode: "insensitive" } },
+      { description: { contains: input.query, mode: "insensitive" } },
+      { originalFileName: { contains: input.query, mode: "insensitive" } },
+    ];
+  }
+
+  const totalCount = await db.material.count({ where });
+  const pageCount = Math.max(1, Math.ceil(totalCount / LIST_PAGE_SIZE));
+  const page = Math.max(1, Math.min(input.page ?? 1, pageCount));
+  const items = await db.material.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip: (page - 1) * LIST_PAGE_SIZE,
+    take: LIST_PAGE_SIZE,
     select: {
       id: true,
       title: true,
@@ -54,6 +86,8 @@ export function listLabMaterials(db, { labId }) {
       uploader: { select: { name: true, email: true } },
     },
   });
+
+  return { items, totalCount, page, pageCount };
 }
 
 /**

@@ -8,8 +8,17 @@ import { prisma } from "@/lib/db";
 import { listLabMaterials } from "@/lib/material-core.js";
 import { getLabStorageUsage } from "@/lib/storage-quota-core.js";
 import {
+  buildListPageHref,
+  LIST_PAGE_SIZE,
+  parseListPage,
+  parseListSearch,
+  parseMaterialType,
+} from "@/lib/list-query.js";
+import {
+  Button,
   ButtonLink,
   Card,
+  controlClassName,
   EmptyState,
   PageHeader,
   getButtonClassName,
@@ -18,10 +27,12 @@ import { MaterialUploadForm, DeleteMaterialForm } from "./material-forms";
 
 export default async function MaterialsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ labId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const { labId } = await params;
+  const [{ labId }, rawSearchParams] = await Promise.all([params, searchParams]);
   let access;
 
   try {
@@ -42,16 +53,33 @@ export default async function MaterialsPage({
     throw error;
   }
 
-  const materials = await listLabMaterials(prisma, {
-    labId: access.labId,
-  });
-  const storageUsage = await getLabStorageUsage(prisma, access.labId);
+  const filters = {
+    query: parseListSearch(rawSearchParams.q),
+    type: parseMaterialType(rawSearchParams.type),
+    page: parseListPage(rawSearchParams.page),
+  };
+  const materialsPath = `/labs/${encodeURIComponent(access.labId)}/materials`;
+  const [materials, storageUsage] = await Promise.all([
+    listLabMaterials(prisma, {
+      labId: access.labId,
+      query: filters.query,
+      type: filters.type || undefined,
+      page: filters.page,
+    }),
+    getLabStorageUsage(prisma, access.labId),
+  ]);
   const uploadBlocked = storageUsage.state.full || storageUsage.globalState.full;
   const uploadBlockedMessage = storageUsage.state.full
     ? "この研究室の保存容量に達したため、資料を追加できません。不要な資料を削除するか、管理者に割当変更を依頼してください。"
     : storageUsage.globalState.full
       ? "アプリ全体の保存上限に達したため、資料を追加できません。管理者にお問い合わせください。"
       : undefined;
+  const resultStart =
+    materials.totalCount === 0 ? 0 : (materials.page - 1) * LIST_PAGE_SIZE + 1;
+  const resultEnd = Math.min(
+    materials.page * LIST_PAGE_SIZE,
+    materials.totalCount,
+  );
 
   return (
     <div className="space-y-7 sm:space-y-8">
@@ -144,25 +172,94 @@ export default async function MaterialsPage({
             登録済み資料
           </h2>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold tabular-nums text-slate-700">
-            {materials.length}件
+            {materials.totalCount}件
+            {materials.totalCount > 0
+              ? `（${resultStart}〜${resultEnd}件表示）`
+              : ""}
           </span>
         </div>
 
-        {materials.length === 0 ? (
+        <form
+          action={materialsPath}
+          className="mt-5 grid gap-4 border-y border-slate-200 py-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(12rem,1fr)_auto] lg:items-end"
+          method="get"
+        >
+          <div>
+            <label
+              className="text-sm font-semibold text-slate-700"
+              htmlFor="material-search"
+            >
+              キーワード
+            </label>
+            <input
+              className={`mt-2 ${controlClassName}`}
+              defaultValue={filters.query}
+              id="material-search"
+              maxLength={100}
+              name="q"
+              placeholder="タイトル・説明・ファイル名を検索"
+              type="search"
+            />
+          </div>
+          <div>
+            <label
+              className="text-sm font-semibold text-slate-700"
+              htmlFor="material-type-filter"
+            >
+              ファイル形式
+            </label>
+            <select
+              className={`mt-2 ${controlClassName}`}
+              defaultValue={filters.type}
+              id="material-type-filter"
+              name="type"
+            >
+              <option value="">すべて</option>
+              <option value="pdf">PDF</option>
+              <option value="word">Word</option>
+              <option value="powerpoint">PowerPoint</option>
+              <option value="excel">Excel</option>
+              <option value="image">画像</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-1">
+            <Button type="submit">検索</Button>
+            <ButtonLink href={materialsPath} variant="secondary">
+              条件をクリア
+            </ButtonLink>
+          </div>
+        </form>
+
+        {materials.totalCount === 0 ? (
           <div className="mt-5">
             <EmptyState
-              title="まだ資料はありません"
-              description="最初の資料を登録すると、Labメンバーが認証付きで閲覧・ダウンロードできます。"
+              title={
+                filters.query || filters.type
+                  ? "条件に一致する資料はありません"
+                  : "まだ資料はありません"
+              }
+              description={
+                filters.query || filters.type
+                  ? "検索語やファイル形式を変更してください。"
+                  : "最初の資料を登録すると、Labメンバーが認証付きで閲覧・ダウンロードできます。"
+              }
               action={
-                <ButtonLink href="#material-upload" variant="secondary">
-                  資料の登録へ
+                <ButtonLink
+                  href={
+                    filters.query || filters.type
+                      ? materialsPath
+                      : "#material-upload"
+                  }
+                  variant="secondary"
+                >
+                  {filters.query || filters.type ? "条件をクリア" : "資料の登録へ"}
                 </ButtonLink>
               }
             />
           </div>
         ) : (
           <ul className="mt-5 divide-y divide-slate-200 border-y border-slate-200">
-            {materials.map((material) => {
+            {materials.items.map((material) => {
               const fileUrl = `/api/labs/${encodeURIComponent(access.labId)}/materials/${encodeURIComponent(material.id)}/file`;
               const inline = [
                 "application/pdf",
@@ -186,48 +283,48 @@ export default async function MaterialsPage({
                           {getFileTypeLabel(material.contentType)}
                         </span>
                       </div>
-                      {material.description ? (
-                        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-600">
-                          {material.description}
-                        </p>
-                      ) : null}
                       <p className="mt-2 break-all text-sm font-medium text-slate-700">
                         {material.originalFileName}
                       </p>
-                      <dl className="mt-3 grid gap-x-6 gap-y-2 rounded-xl bg-slate-50 p-3 text-sm sm:grid-cols-2 sm:p-4 xl:grid-cols-4">
-                        <div className="min-w-0">
-                          <dt className="text-xs font-semibold text-slate-500">
-                            ファイル形式
-                          </dt>
-                          <dd className="mt-1 break-all font-medium text-slate-800">
-                            {material.contentType}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-xs font-semibold text-slate-500">
-                            サイズ
-                          </dt>
-                          <dd className="mt-1 font-medium tabular-nums text-slate-800">
-                            {formatFileSize(material.sizeBytes)}
-                          </dd>
-                        </div>
-                        <div className="min-w-0">
-                          <dt className="text-xs font-semibold text-slate-500">
-                            登録者
-                          </dt>
-                          <dd className="mt-1 break-words font-medium text-slate-800">
-                            {uploaderName}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-xs font-semibold text-slate-500">
-                            登録日時
-                          </dt>
-                          <dd className="mt-1 font-medium text-slate-800">
-                            {formatDate(material.createdAt)}
-                          </dd>
-                        </div>
-                      </dl>
+                      <p className="mt-2 text-xs text-slate-500">
+                        登録日：{formatDate(material.createdAt)}
+                      </p>
+                      <details className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-3 open:bg-slate-50/60">
+                        <summary className="cursor-pointer rounded text-sm font-semibold text-indigo-800 marker:text-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600">
+                          詳細
+                        </summary>
+                        {material.description ? (
+                          <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600">
+                            {material.description}
+                          </p>
+                        ) : null}
+                        <dl className="mt-3 grid gap-x-6 gap-y-2 rounded-xl bg-slate-50 p-3 text-sm sm:grid-cols-2">
+                          <div className="min-w-0">
+                            <dt className="text-xs font-semibold text-slate-500">
+                              ファイル形式
+                            </dt>
+                            <dd className="mt-1 break-all font-medium text-slate-800">
+                              {material.contentType}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs font-semibold text-slate-500">
+                              サイズ
+                            </dt>
+                            <dd className="mt-1 font-medium tabular-nums text-slate-800">
+                              {formatFileSize(material.sizeBytes)}
+                            </dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="text-xs font-semibold text-slate-500">
+                              登録者
+                            </dt>
+                            <dd className="mt-1 break-words font-medium text-slate-800">
+                              {uploaderName}
+                            </dd>
+                          </div>
+                        </dl>
+                      </details>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -256,6 +353,51 @@ export default async function MaterialsPage({
             })}
           </ul>
         )}
+
+        {materials.pageCount > 1 ? (
+          <nav
+            aria-label="資料一覧のページ"
+            className="mt-5 flex flex-wrap items-center justify-between gap-3"
+          >
+            <p className="text-sm text-slate-600">
+              {materials.page} / {materials.pageCount}ページ
+            </p>
+            <div className="flex gap-2">
+              {materials.page > 1 ? (
+                <ButtonLink
+                  href={buildListPageHref(materialsPath, {
+                    q: filters.query,
+                    type: filters.type,
+                    page: materials.page - 1,
+                  })}
+                  variant="secondary"
+                >
+                  前へ
+                </ButtonLink>
+              ) : (
+                <Button disabled type="button" variant="secondary">
+                  前へ
+                </Button>
+              )}
+              {materials.page < materials.pageCount ? (
+                <ButtonLink
+                  href={buildListPageHref(materialsPath, {
+                    q: filters.query,
+                    type: filters.type,
+                    page: materials.page + 1,
+                  })}
+                  variant="secondary"
+                >
+                  次へ
+                </ButtonLink>
+              ) : (
+                <Button disabled type="button" variant="secondary">
+                  次へ
+                </Button>
+              )}
+            </div>
+          </nav>
+        ) : null}
       </Card>
     </div>
   );

@@ -1,3 +1,5 @@
+import { LIST_PAGE_SIZE } from "./list-query.js";
+
 /**
  * @typedef {"ASSIGNEE_NOT_MEMBER" | "TASK_NOT_FOUND"} TaskOperationErrorCode
  * @typedef {{
@@ -63,12 +65,31 @@ export class TaskOperationError extends Error {
  * been checked by `requireLabMember`.
  *
  * @param {import("../generated/prisma/client").PrismaClient} db
- * @param {string} labId
+ * @param {{labId: string, query?: string, status?: "TODO" | "IN_PROGRESS" | "DONE", assigneeId?: string | null, page?: number}} input
  */
-export function listTasksForLab(db, labId) {
-  return db.task.findMany({
-    where: { labId },
-    orderBy: { createdAt: "desc" },
+export async function listTasksForLab(db, input) {
+  const where = { labId: input.labId };
+  if (input.status) {
+    where.status = input.status;
+  }
+  if (input.assigneeId !== undefined) {
+    where.assigneeId = input.assigneeId;
+  }
+  if (input.query) {
+    where.OR = [
+      { title: { contains: input.query, mode: "insensitive" } },
+      { description: { contains: input.query, mode: "insensitive" } },
+    ];
+  }
+
+  const totalCount = await db.task.count({ where });
+  const pageCount = Math.max(1, Math.ceil(totalCount / LIST_PAGE_SIZE));
+  const page = Math.max(1, Math.min(input.page ?? 1, pageCount));
+  const items = await db.task.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip: (page - 1) * LIST_PAGE_SIZE,
+    take: LIST_PAGE_SIZE,
     select: {
       id: true,
       title: true,
@@ -82,6 +103,8 @@ export function listTasksForLab(db, labId) {
       },
     },
   });
+
+  return { items, totalCount, page, pageCount };
 }
 
 /**
