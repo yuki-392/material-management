@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { logMaterialError } from "./material-error-logging.js";
 
 /** @typedef {import("@/generated/prisma/client").PrismaClient} PrismaClient */
 
@@ -16,9 +17,12 @@ const allowedContentTypes = new Set([
 ]);
 
 export class MaterialOperationError extends Error {
-  /** @param {"NOT_FOUND" | "STORAGE_DELETE_FAILED" | "STORAGE_OBJECT_MISSING"} code */
-  constructor(code) {
-    super(code);
+  /**
+   * @param {"NOT_FOUND" | "STORAGE_CONFIGURATION_FAILED" | "STORAGE_UPLOAD_FAILED" | "METADATA_CREATE_FAILED" | "STORAGE_DELETE_FAILED" | "STORAGE_OBJECT_MISSING"} code
+   * @param {unknown} [cause]
+   */
+  constructor(code, cause) {
+    super(code, { cause });
     this.name = "MaterialOperationError";
     this.code = code;
   }
@@ -56,12 +60,33 @@ export function listLabMaterials(db, { labId }) {
 export async function createMaterial(db, storage, input) {
   const storageKey = `labs/${input.labId}/materials/${randomUUID()}`;
 
-  await storage.putObject({
-    key: storageKey,
-    body: input.body,
-    contentType: input.contentType,
-    sizeBytes: input.sizeBytes,
-  });
+  try {
+    await storage.putObject({
+      key: storageKey,
+      body: input.body,
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+    });
+  } catch (error) {
+    const isConfigurationError =
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error.code === "MISSING_STORAGE_CONFIGURATION" ||
+        error.code === "INVALID_STORAGE_ENDPOINT");
+    logMaterialError(
+      isConfigurationError
+        ? "material.upload.storage-config"
+        : "material.upload.storage-put",
+      error,
+    );
+    throw new MaterialOperationError(
+      isConfigurationError
+        ? "STORAGE_CONFIGURATION_FAILED"
+        : "STORAGE_UPLOAD_FAILED",
+      error,
+    );
+  }
 
   try {
     return await db.material.create({
@@ -77,15 +102,15 @@ export async function createMaterial(db, storage, input) {
       },
     });
   } catch (error) {
+    logMaterialError("material.upload.metadata-create", error);
+
     try {
       await storage.deleteObject(storageKey);
-    } catch {
-      console.error(
-        "Material upload compensation failed after a metadata insert error.",
-      );
+    } catch (cleanupError) {
+      logMaterialError("material.upload.compensation-delete", cleanupError);
     }
 
-    throw error;
+    throw new MaterialOperationError("METADATA_CREATE_FAILED", error);
   }
 }
 

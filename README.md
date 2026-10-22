@@ -52,7 +52,7 @@ PostgreSQLとS3互換ストレージは別々のサービスなので、両方�
 - **ログインとプロフィール** — Google OAuthでログインし、教員・学生の区分を設定します。学生は学生番号が必要です。ログアウトもできます。
 - **Labとメンバー** — Lab未所属のユーザーがLabを作成します。作成者はOwner兼Memberになります。Ownerは、アプリに登録済みのユーザーをメールアドレスで追加・削除できます。
 - **Task管理** — Lab内のメンバーがTaskを作成・編集・削除できます。タイトル、説明、`TODO`・`IN_PROGRESS`・`DONE`のstatus、担当者、締切を設定します。
-- **Material管理** — PDF、DOCX、PPTX、XLSX、JPEG、PNGをアップロードし、Lab内の資料一覧から管理できます。PDFと画像はブラウザーで開き、Officeファイルはダウンロードします。アップロード上限は1ファイル20MiBです。
+- **Material管理** — PDF、DOCX、PPTX、XLSX、JPEG、PNGをアップロードし、Lab内の資料一覧から管理できます。PDFと画像はブラウザーで開き、Officeファイルはダウンロードします。アップロード上限は1ファイル4MiBです。
 
 ## 画面イメージ
 
@@ -75,8 +75,6 @@ PostgreSQLとS3互換ストレージは別々のサービスなので、両方�
 ![登録済みTaskと締切表示](docs/screenshots/task2.png)
 
 ### Material
-
-![Materialアップロードフォーム](docs/screenshots/materials1.png)
 
 ![登録済みMaterial一覧](docs/screenshots/materials2.png)
 
@@ -102,7 +100,7 @@ Vercel / Next.js App Router
 - **公開URL** — [https://material-management-orpin.vercel.app/](https://material-management-orpin.vercel.app/)
 - **Webアプリ** — VercelでNext.jsアプリを実行します。
 - **データベース** — NeonのPostgreSQLを使い、Prisma Migrateでスキーマを管理します。
-- **ファイル** — ファイル本体はprivateなS3互換オブジェクトストレージに保存します。アプリはサーバー側のAWS SDKから接続し、PostgreSQLにはMaterialのメタデータとストレージキーを保存します。接続先・認証情報は`S3_ENDPOINT`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET`、`S3_REGION`で設定します。
+- **ファイル** — ファイル本体はprivateなS3互換オブジェクトストレージに保存します。アプリはサーバー側のAWS SDKから接続し、PostgreSQLにはMaterialのメタデータとストレージキーを保存します。バケットは事前に作成し、実行用認証情報には必要なオブジェクト操作権限だけを付与します。接続先・認証情報は`S3_ENDPOINT`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET`、`S3_REGION`で設定します。
 - **環境変数** — 本番用のDB・OAuth・ストレージ設定はVercelの環境変数として管理します。値をリポジトリに保存しません。
 
 ローカル開発ではDocker ComposeのPostgreSQLとSeaweedFSを使います。本番ストレージも同じS3互換APIで接続し、SeaweedFSはローカル開発用です。
@@ -135,7 +133,7 @@ Labの読み取り・更新、Server Action、Material Route Handlerでは、サ
 
 ## Materialの検証範囲
 
-アップロードでは20MiB上限と、拡張子・ブラウザー提供MIME typeの組み合わせを確認します。ファイル内容のマジックバイト検査やウイルススキャンは行っていません。この形式確認だけでファイルの安全性を完全に保証するものではありません。
+アップロードでは4MiB上限と、拡張子・ブラウザー提供MIME typeの組み合わせを確認します。ファイル内容のマジックバイト検査やウイルススキャンは行っていません。この形式確認だけでファイルの安全性を完全に保証するものではありません。
 
 ## セットアップ
 
@@ -169,6 +167,7 @@ PostgreSQLとSeaweedFSを起動し、Prisma Clientを生成してmigrationを適
 
 ```bash
 docker compose up -d
+npm run storage:setup
 npm run db:generate
 npx prisma migrate deploy
 npm run dev

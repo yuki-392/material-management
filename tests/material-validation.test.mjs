@@ -47,17 +47,18 @@ test("converts a whitespace-only optional description to null", () => {
   assert.equal(result.data.description, null);
 });
 
-test("rejects missing files and files larger than 20 MiB", () => {
+test("rejects missing files and files larger than 4 MiB", () => {
   const missing = validateMaterialInput(validInput({ file: null }));
   const tooLarge = validateMaterialInput(
     validInput({ file: validFile({ size: MAX_MATERIAL_FILE_SIZE + 1 }) }),
   );
 
+  assert.equal(MAX_MATERIAL_FILE_SIZE, 4 * 1024 * 1024);
   assert.ok(missing.fieldErrors.file);
   assert.ok(tooLarge.fieldErrors.file);
 });
 
-test("accepts a file exactly at the 20 MiB limit", () => {
+test("accepts a file exactly at the 4 MiB limit", () => {
   const result = validateMaterialInput(
     validInput({ file: validFile({ size: MAX_MATERIAL_FILE_SIZE }) }),
   );

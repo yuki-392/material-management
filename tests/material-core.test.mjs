@@ -90,6 +90,9 @@ test("uploads with a server-created key and the session uploader id", async () =
 
 test("compensates a failed metadata insert by deleting the uploaded object", async () => {
   const operations = [];
+  const logs = [];
+  const originalConsoleError = console.error;
+  console.error = (...args) => logs.push(args);
   const db = {
     material: {
       create: async () => {
@@ -103,19 +106,26 @@ test("compensates a failed metadata insert by deleting the uploaded object", asy
     deleteObject: async (key) => operations.push(`storage-delete:${key}`),
   };
 
-  await assert.rejects(
-    createMaterial(db, storage, {
-      labId: "lab-1",
-      userId: "user-1",
-      title: "Lab notes",
-      description: null,
-      originalFileName: "paper.pdf",
-      contentType: "application/pdf",
-      sizeBytes: 3,
-      body: new Uint8Array([1, 2, 3]),
-    }),
-    /database failure/,
-  );
+  try {
+    await assert.rejects(
+      createMaterial(db, storage, {
+        labId: "lab-1",
+        userId: "user-1",
+        title: "Lab notes",
+        description: null,
+        originalFileName: "paper.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 3,
+        body: new Uint8Array([1, 2, 3]),
+      }),
+      (error) =>
+        error instanceof MaterialOperationError &&
+        error.code === "METADATA_CREATE_FAILED" &&
+        error.cause?.message === "database failure",
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
 
   assert.equal(operations[0].startsWith("storage-put:labs/lab-1/materials/"), true);
   assert.equal(operations[1], "database-create");
@@ -123,6 +133,165 @@ test("compensates a failed metadata insert by deleting the uploaded object", asy
     operations[2],
     `storage-delete:${operations[0].slice("storage-put:".length)}`,
   );
+  assert.deepEqual(logs, [
+    ["Material operation failed.", { stage: "material.upload.metadata-create", name: "Error" }],
+  ]);
+});
+
+test("tags storage upload failures and skips metadata creation", async () => {
+  const storageFailure = Object.assign(new Error("storage failure"), {
+    name: "AccessDenied",
+  });
+  let databaseCalled = false;
+  const db = {
+    material: {
+      create: async () => {
+        databaseCalled = true;
+      },
+    },
+  };
+  const storage = {
+    putObject: async () => { throw storageFailure; },
+    deleteObject: async () => {},
+  };
+
+  const logs = [];
+  const originalConsoleError = console.error;
+  console.error = (...args) => logs.push(args);
+  try {
+    await assert.rejects(
+      createMaterial(db, storage, {
+        labId: "lab-1",
+        userId: "user-1",
+        title: "Lab notes",
+        description: null,
+        originalFileName: "paper.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 3,
+        body: new Uint8Array([1, 2, 3]),
+      }),
+      (error) =>
+        error instanceof MaterialOperationError &&
+        error.code === "STORAGE_UPLOAD_FAILED" &&
+        error.cause === storageFailure,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(databaseCalled, false);
+  assert.deepEqual(logs, [
+    ["Material operation failed.", { stage: "material.upload.storage-put", name: "AccessDenied" }],
+  ]);
+});
+
+test("logs storage configuration failures separately from object upload failures", async () => {
+  const configurationFailure = Object.assign(
+    new Error("storage credentials are missing"),
+    { code: "MISSING_STORAGE_CONFIGURATION" },
+  );
+  const db = { material: { create: async () => assert.fail("DB must not be called") } };
+  const storage = {
+    putObject: async () => { throw configurationFailure; },
+    deleteObject: async () => {},
+  };
+  const logs = [];
+  const originalConsoleError = console.error;
+  console.error = (...args) => logs.push(args);
+
+  try {
+    await assert.rejects(
+      createMaterial(db, storage, {
+        labId: "lab-1",
+        userId: "user-1",
+        title: "Lab notes",
+        description: null,
+        originalFileName: "paper.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 3,
+        body: new Uint8Array([1, 2, 3]),
+      }),
+      (error) =>
+        error instanceof MaterialOperationError &&
+        error.code === "STORAGE_CONFIGURATION_FAILED" &&
+        error.cause === configurationFailure,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.deepEqual(logs, [
+    [
+      "Material operation failed.",
+      {
+        stage: "material.upload.storage-config",
+        name: "Error",
+        code: "MISSING_STORAGE_CONFIGURATION",
+      },
+    ],
+  ]);
+});
+
+test("logs safe context when upload compensation fails", async () => {
+  const operations = [];
+  const logs = [];
+  const originalConsoleError = console.error;
+  console.error = (...args) => logs.push(args);
+  const db = {
+    material: {
+      create: async () => {
+        operations.push("database-create");
+        throw Object.assign(new Error("database failure with private row data"), {
+          code: "P2002",
+        });
+      },
+    },
+  };
+  const storage = {
+    putObject: async () => operations.push("storage-put"),
+    deleteObject: async () => {
+      operations.push("storage-delete");
+      throw Object.assign(new Error("private storage key"), {
+        name: "AccessDenied",
+        $metadata: { httpStatusCode: 403, requestId: "request-456" },
+      });
+    },
+  };
+
+  try {
+    await assert.rejects(
+      createMaterial(db, storage, {
+        labId: "lab-1",
+        userId: "user-1",
+        title: "Lab notes",
+        description: null,
+        originalFileName: "private-paper.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 3,
+        body: new Uint8Array([1, 2, 3]),
+      }),
+      (error) =>
+        error instanceof MaterialOperationError &&
+        error.code === "METADATA_CREATE_FAILED",
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.deepEqual(operations, ["storage-put", "database-create", "storage-delete"]);
+  assert.equal(logs.length, 2);
+  assert.deepEqual(logs[0][1], {
+    stage: "material.upload.metadata-create",
+    name: "Error",
+    code: "P2002",
+  });
+  assert.deepEqual(logs[1][1], {
+    stage: "material.upload.compensation-delete",
+    name: "AccessDenied",
+    httpStatusCode: 403,
+    requestId: "request-456",
+  });
+  assert.doesNotMatch(JSON.stringify(logs), /private|paper|user-1|lab-1/);
 });
 
 test("looks up a file using both Material id and Lab id, then fetches the DB key", async () => {

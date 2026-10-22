@@ -21,6 +21,7 @@ import {
   deleteMaterialObject,
   putMaterialObject,
 } from "@/lib/material-storage";
+import { logMaterialError } from "@/lib/material-error-logging.js";
 import type { MaterialFormState } from "@/lib/material-form-state";
 
 export async function uploadMaterialAction(
@@ -55,11 +56,20 @@ export async function uploadMaterialAction(
   }
 
   if (file.size > MAX_MATERIAL_FILE_SIZE) {
-    return { fieldErrors: { file: "ファイルサイズは20MiB以下にしてください。" } };
+    return { fieldErrors: { file: "ファイルサイズは4MiB以下にしてください。" } };
+  }
+
+  const saveError =
+    "資料を保存できませんでした。時間をおいて再度お試しください。";
+  let body: Uint8Array;
+  try {
+    body = new Uint8Array(await file.arrayBuffer());
+  } catch (error) {
+    logMaterialError("material.upload.file-read", error);
+    return { formError: saveError };
   }
 
   try {
-    const body = new Uint8Array(await file.arrayBuffer());
     await createMaterial(
       prisma,
       {
@@ -73,11 +83,12 @@ export async function uploadMaterialAction(
         body,
       },
     );
-  } catch {
-    return {
-      formError:
-        "資料を保存できませんでした。ストレージの設定と接続を確認してから、もう一度お試しください。",
-    };
+  } catch (error) {
+    if (!(error instanceof MaterialOperationError)) {
+      logMaterialError("material.upload.unclassified", error);
+    }
+
+    return { formError: saveError };
   }
 
   const path = getMaterialsPath(access.labId);

@@ -42,10 +42,11 @@
 
 - Labメンバー全員が、そのLab専用の資料をアップロード・一覧・表示・ダウンロード・削除できる。Owner限定にはしない。
 - ファイル本体はPostgreSQLに保存せず、ローカル開発ではSeaweedFSのprivateなS3互換ストレージに保存する。PostgreSQLにはタイトル、説明、元ファイル名、storage key、形式、サイズ、登録者、日時を保存する。
-- 1ファイルは20MiB以下とし、PDF、DOCX、PPTX、XLSX、JPEG、PNGだけを受け付ける。サーバーで拡張子とMIME typeを照合する。これはファイル内容の安全性を完全に証明する検査ではない。
-- Server Actionの既定本文上限はファイル上限より小さいため、Next.jsの `serverActions.bodySizeLimit` を21MiBにする。これは20MiBのファイルとmultipart本文の小さなオーバーヘッドを受けるための設定。
+- 1ファイルは4MiB以下とし、PDF、DOCX、PPTX、XLSX、JPEG、PNGだけを受け付ける。サーバーで拡張子とMIME typeを照合する。これはファイル内容の安全性を完全に証明する検査ではない。
+- Vercel Functionのリクエスト上限を超えないよう、Next.jsの `serverActions.bodySizeLimit` は約4.25MiBにする。4MiBのファイル本体にmultipart本文のオーバーヘッドを加えても上限内に収める。
 - PDFとJPEG/PNGはLabメンバー認可済みRoute Handlerからinline配信し、Office形式は添付ダウンロードにする。S3 endpointをブラウザーへ公開しない。
 - ストレージキーはサーバーで生成する。削除時はストレージ削除後にDBメタデータを削除し、ストレージ削除に失敗した場合はDB行を残す。DB登録失敗時はアップロード済みオブジェクトの補償削除を試す。
+- 本番のS3互換ストレージではバケットを事前作成し、アプリの実行用認証情報にはオブジェクト操作に必要な権限だけを付与する。ローカルSeaweedFSのバケットは `npm run storage:setup` で初期化する。
 - Lab削除と本番用ストレージ構成、ウイルススキャン、ファイル検索、Officeプレビュー、版管理はMVPに含めない。
 
 ## 認証・認可の境界

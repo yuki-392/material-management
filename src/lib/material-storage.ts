@@ -1,12 +1,11 @@
 import "server-only";
 
 import {
-  CreateBucketCommand,
   DeleteObjectCommand,
   GetObjectCommand,
-  PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { putMaterialObject as putMaterialS3Object } from "./material-storage-commands.js";
 
 type StorageConfig = {
   endpoint: string;
@@ -15,6 +14,16 @@ type StorageConfig = {
   bucket: string;
   region: string;
 };
+
+class MaterialStorageConfigurationError extends Error {
+  code: "MISSING_STORAGE_CONFIGURATION" | "INVALID_STORAGE_ENDPOINT";
+
+  constructor(code: MaterialStorageConfigurationError["code"]) {
+    super(code);
+    this.name = "MaterialStorageConfigurationError";
+    this.code = code;
+  }
+}
 
 let client: S3Client | undefined;
 
@@ -26,16 +35,22 @@ function getStorageConfig(): StorageConfig {
   const region = process.env.S3_REGION;
 
   if (!endpoint || !accessKeyId || !secretAccessKey || !bucket || !region) {
-    throw new Error("Material storage is not configured.");
+    throw new MaterialStorageConfigurationError("MISSING_STORAGE_CONFIGURATION");
   }
 
-  const endpointUrl = new URL(endpoint);
+  let endpointUrl: URL;
+  try {
+    endpointUrl = new URL(endpoint);
+  } catch {
+    throw new MaterialStorageConfigurationError("INVALID_STORAGE_ENDPOINT");
+  }
+
   if (
     (endpointUrl.protocol !== "http:" && endpointUrl.protocol !== "https:") ||
     endpointUrl.username ||
     endpointUrl.password
   ) {
-    throw new Error("Material storage is not configured.");
+    throw new MaterialStorageConfigurationError("INVALID_STORAGE_ENDPOINT");
   }
 
   return { endpoint, accessKeyId, secretAccessKey, bucket, region };
@@ -55,40 +70,6 @@ function getS3Client(config: StorageConfig) {
   return client;
 }
 
-function isBucketAlreadyCreated(error: unknown) {
-  if (typeof error !== "object" || error === null) {
-    return false;
-  }
-
-  const name = "name" in error ? error.name : undefined;
-  const statusCode =
-    "$metadata" in error &&
-    typeof error.$metadata === "object" &&
-    error.$metadata !== null &&
-    "httpStatusCode" in error.$metadata
-      ? error.$metadata.httpStatusCode
-      : undefined;
-
-  return (
-    name === "BucketAlreadyExists" ||
-    name === "BucketAlreadyOwnedByYou" ||
-    statusCode === 409
-  );
-}
-
-async function createBucketIfMissing(
-  s3: S3Client,
-  bucket: string,
-) {
-  try {
-    await s3.send(new CreateBucketCommand({ Bucket: bucket }));
-  } catch (error) {
-    if (!isBucketAlreadyCreated(error)) {
-      throw error;
-    }
-  }
-}
-
 export async function putMaterialObject({
   key,
   body,
@@ -102,17 +83,13 @@ export async function putMaterialObject({
 }) {
   const config = getStorageConfig();
   const s3 = getS3Client(config);
-  await createBucketIfMissing(s3, config.bucket);
-
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: config.bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-      ContentLength: sizeBytes,
-    }),
-  );
+  await putMaterialS3Object(s3, {
+    bucket: config.bucket,
+    key,
+    body,
+    contentType,
+    sizeBytes,
+  });
 }
 
 export async function getMaterialObject(key: string) {

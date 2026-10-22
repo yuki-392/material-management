@@ -1,4 +1,4 @@
-export const MAX_MATERIAL_FILE_SIZE = 20 * 1024 * 1024;
+export const MAX_MATERIAL_FILE_SIZE = 4 * 1024 * 1024;
 export const MATERIAL_TITLE_MAX_LENGTH = 200;
 export const MATERIAL_DESCRIPTION_MAX_LENGTH = 5000;
 export const MATERIAL_FILE_NAME_MAX_LENGTH = 255;
@@ -81,7 +81,7 @@ export function validateMaterialInput({ title, description, file }) {
     } else if (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) {
       fieldErrors.file = "空のファイルはアップロードできません。";
     } else if (sizeBytes > MAX_MATERIAL_FILE_SIZE) {
-      fieldErrors.file = "ファイルサイズは20MiB以下にしてください。";
+      fieldErrors.file = "ファイルサイズは4MiB以下にしてください。";
     } else {
       const extension = getFileExtension(originalFileName);
       const expectedContentType = allowedFilesByExtension[extension];

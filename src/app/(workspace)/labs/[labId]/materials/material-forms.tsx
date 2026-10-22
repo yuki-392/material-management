@@ -86,7 +86,7 @@ export function MaterialUploadForm({ labId }: { labId: string }) {
           type="file"
         />
         <p className="mt-1 text-xs text-slate-500" id="material-file-help">
-          PDF、DOCX、PPTX、XLSX、JPEG、PNG（20MiB以下）
+          PDF、DOCX、PPTX、XLSX、JPEG、PNG（4MiB以下）
         </p>
         <FieldError id="material-file-error" message={state.fieldErrors?.file} />
       </div>
