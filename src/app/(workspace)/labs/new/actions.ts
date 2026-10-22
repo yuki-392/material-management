@@ -58,6 +58,21 @@ export async function createLabAction(
       };
     }
 
+    if (error instanceof LabCreationError) {
+      if (error.code === "LAB_LIMIT_REACHED") {
+        return {
+          formError:
+            "アプリで作成できる研究室は累計8件までです。管理者にお問い合わせください。",
+        };
+      }
+      if (error.code === "STORAGE_CAPACITY_UNAVAILABLE") {
+        return {
+          formError:
+            "新しい研究室に割り当てる保存容量がありません。管理者にお問い合わせください。",
+        };
+      }
+    }
+
     return {
       formError: "Labを作成できませんでした。時間をおいて再度お試しください。",
     };

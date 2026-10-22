@@ -53,6 +53,7 @@ PostgreSQLとS3互換ストレージは別々のサービスなので、両方�
 - **Labとメンバー** — Lab未所属のユーザーがLabを作成します。作成者はOwner兼Memberになります。Ownerは、アプリに登録済みのユーザーをメールアドレスで追加・削除できます。
 - **Task管理** — Lab内のメンバーがTaskを作成・編集・削除できます。タイトル、説明、`TODO`・`IN_PROGRESS`・`DONE`のstatus、担当者、締切を設定します。
 - **Material管理** — PDF、DOCX、PPTX、XLSX、JPEG、PNGをアップロードし、Lab内の資料一覧から管理できます。PDFと画像はブラウザーで開き、Officeファイルはダウンロードします。アップロード上限は1ファイル4MiBです。
+- **容量管理** — Labごとに資料容量を割り当て、80%で画面内警告、割当到達でアップロードを停止します。アプリ全体は9GB、Labへの割当合計は8GB、Lab作成は累計8件までです。管理者は`/admin/storage`で割当を調整します。
 
 ## 画面イメージ
 
@@ -102,6 +103,9 @@ Vercel / Next.js App Router
 - **データベース** — NeonのPostgreSQLを使い、Prisma Migrateでスキーマを管理します。
 - **ファイル** — ファイル本体はprivateなS3互換オブジェクトストレージに保存します。アプリはサーバー側のAWS SDKから接続し、PostgreSQLにはMaterialのメタデータとストレージキーを保存します。バケットは事前に作成し、実行用認証情報には必要なオブジェクト操作権限だけを付与します。接続先・認証情報は`S3_ENDPOINT`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET`、`S3_REGION`で設定します。
 - **環境変数** — 本番用のDB・OAuth・ストレージ設定はVercelの環境変数として管理します。値をリポジトリに保存しません。
+- **容量上限** — 資料のDB登録サイズを基にアプリ全体9GB、Lab割当合計8GBで制御します。割当の80%で警告し、全体またはLabの上限に達すると新規アップロードを停止します。旧バージョンやDBに登録されていないオブジェクトはアプリの使用量に含みません。
+
+容量管理のDB変更を含むリリースでは、対象DBの`DATABASE_URL`を設定した安全な環境から`npm run db:migrate:deploy`を先に実行してからアプリをデプロイします。VercelのProduction環境変数には、管理画面を使うGoogleメールアドレスを`APP_ADMIN_EMAILS`へカンマ区切りで設定します。
 
 ローカル開発ではDocker ComposeのPostgreSQLとSeaweedFSを使います。本番ストレージも同じS3互換APIで接続し、SeaweedFSはローカル開発用です。
 
@@ -169,7 +173,7 @@ PostgreSQLとSeaweedFSを起動し、Prisma Clientを生成してmigrationを適
 docker compose up -d
 npm run storage:setup
 npm run db:generate
-npx prisma migrate deploy
+npm run db:migrate:deploy
 npm run dev
 ```
 
@@ -197,6 +201,7 @@ docker compose down
 | `S3_SECRET_ACCESS_KEY` | S3互換ストレージ接続用Secret Access Key |
 | `S3_BUCKET` | Materialファイル保存先bucket |
 | `S3_REGION` | S3互換ストレージのregion設定 |
+| `APP_ADMIN_EMAILS` | 管理画面を使えるGoogleメールアドレスのカンマ区切り一覧（サーバー専用） |
 | `AUTH_SECRET` | Auth.jsのセッション署名・暗号化用secret |
 | `AUTH_GOOGLE_ID` | Google OAuth Client ID |
 | `AUTH_GOOGLE_SECRET` | Google OAuth Client Secret |
@@ -209,13 +214,15 @@ docker compose down
 | --- | --- | --- |
 | Lint | `npm run lint` | PASS |
 | TypeScript | `npx tsc --noEmit` | PASS |
-| Unit / logic tests | `node --test` | PASS（82件） |
-| Production build | `npx next build --webpack` | PASS |
+| Unit / logic tests | `node --test` | PASS（110件） |
+| Production build | `npx next build --webpack` | PASS（Google Fontsテスト用モックを使用） |
 | Patch whitespace | `git diff --check` | PASS |
 | 手動ブラウザーE2E（主要導線） | Google OAuth、Profile、Lab、Member、Task、Material、Logout | PASS |
 | 認可境界（ユーザー手動確認） | 別Lab URL、Task / Material ID指定、Owner限定操作、Server Action相当の送信値改変 | PASS |
 
 主要導線は実ブラウザーで確認しました。認可境界は、前回BLOCKEDだった項目をユーザーが手動で確認しPASSと報告した結果です。自動ブラウザーE2Eテストは導入していません。
+
+2026-10-22のこの作業環境では`fonts.googleapis.com`を名前解決できず、通常の本番ビルドはGoogle Fonts取得時に停止しました。アプリコードのビルド確認はNext.jsのテスト用Google Fontsモックを使って完了しています。本番デプロイでは実際のGoogle Fonts取得を含むビルドを確認してください。
 
 本番環境では2026-09-29に公開URLへアクセスし、HTTPSで表示されること、未ログイン時に`/login`へ遷移すること、ログイン画面とGoogleログインボタンが表示されることを確認しました。
 

@@ -13,7 +13,15 @@ import {
   textareaClassName,
 } from "@/components/ui";
 
-export function MaterialUploadForm({ labId }: { labId: string }) {
+export function MaterialUploadForm({
+  labId,
+  uploadBlocked = false,
+  uploadBlockedMessage,
+}: {
+  labId: string;
+  uploadBlocked?: boolean;
+  uploadBlockedMessage?: string;
+}) {
   const [state, formAction, isPending] = useActionState<
     MaterialFormState,
     FormData
@@ -93,7 +101,11 @@ export function MaterialUploadForm({ labId }: { labId: string }) {
 
       {state.formError ? <FormError message={state.formError} /> : null}
 
-      <Button disabled={isPending} type="submit">
+      {uploadBlockedMessage ? (
+        <FormError message={uploadBlockedMessage} />
+      ) : null}
+
+      <Button disabled={isPending || uploadBlocked} type="submit">
         {isPending ? "アップロード中…" : "資料をアップロード"}
       </Button>
     </form>

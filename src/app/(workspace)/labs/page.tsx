@@ -7,6 +7,7 @@ import {
 } from "@/lib/authorization";
 import { getMissingAuthEnvironmentVariables } from "@/lib/auth-environment.js";
 import { prisma } from "@/lib/db";
+import { getLabCreationCapacity } from "@/lib/storage-quota-core.js";
 import { ButtonLink, Card, EmptyState, PageHeader } from "@/components/ui";
 import { AddMemberForm, RemoveMemberForm } from "./member-management";
 
@@ -48,6 +49,8 @@ export default async function LabsPage() {
   });
 
   if (!membership) {
+    const capacity = await getLabCreationCapacity(prisma);
+    const canCreateLab = capacity.canCreate;
     return (
       <div className="space-y-6">
         <PageHeader
@@ -57,9 +60,15 @@ export default async function LabsPage() {
         />
         <Card>
           <EmptyState
-            title="まだLabに所属していません"
-            description="Labを作成すると、あなたがOwner兼最初のメンバーになります。Ownerから招待される場合は、登録済みのメールアドレスを伝えてください。"
-            action={<ButtonLink href="/labs/new">Labを作成する</ButtonLink>}
+            title={canCreateLab ? "まだLabに所属していません" : "Labを作成できません"}
+            description={
+              canCreateLab
+                ? "Labを作成すると、あなたがOwner兼最初のメンバーになります。Ownerから招待される場合は、登録済みのメールアドレスを伝えてください。"
+                : capacity.labCount >= capacity.maxLabCount
+                  ? "アプリで作成できる研究室は累計8件までです。管理者にお問い合わせください。"
+                  : "新しい研究室に割り当てる保存容量がありません。管理者にお問い合わせください。"
+            }
+            action={canCreateLab ? <ButtonLink href="/labs/new">Labを作成する</ButtonLink> : undefined}
           />
         </Card>
       </div>

@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { logMaterialError } from "./material-error-logging.js";
+import {
+  StorageQuotaError,
+  commitStorageUpload,
+  releaseStorageUpload,
+  reserveStorageUpload,
+} from "./storage-quota-core.js";
 
 /** @typedef {import("@/generated/prisma/client").PrismaClient} PrismaClient */
 
@@ -18,7 +24,7 @@ const allowedContentTypes = new Set([
 
 export class MaterialOperationError extends Error {
   /**
-   * @param {"NOT_FOUND" | "STORAGE_CONFIGURATION_FAILED" | "STORAGE_UPLOAD_FAILED" | "METADATA_CREATE_FAILED" | "STORAGE_DELETE_FAILED" | "STORAGE_OBJECT_MISSING"} code
+   * @param {"NOT_FOUND" | "STORAGE_CONFIGURATION_FAILED" | "STORAGE_UPLOAD_FAILED" | "METADATA_CREATE_FAILED" | "STORAGE_DELETE_FAILED" | "STORAGE_OBJECT_MISSING" | "QUOTA_RESERVATION_FAILED"} code
    * @param {unknown} [cause]
    */
   constructor(code, cause) {
@@ -56,9 +62,27 @@ export function listLabMaterials(db, { labId }) {
  * @param {PrismaClient} db
  * @param {{putObject: (input: {key: string, body: Uint8Array, contentType: string, sizeBytes: number}) => Promise<void>, deleteObject: (key: string) => Promise<void>}} storage
  * @param {{labId: string, userId: string, title: string, description: string | null, originalFileName: string, contentType: string, sizeBytes: number, body: Uint8Array}} input
+ * @param {{reserve?: typeof reserveStorageUpload, commit?: typeof commitStorageUpload, release?: typeof releaseStorageUpload}} [quota]
  */
-export async function createMaterial(db, storage, input) {
+export async function createMaterial(db, storage, input, quota = {}) {
   const storageKey = `labs/${input.labId}/materials/${randomUUID()}`;
+  const reserve = quota.reserve ?? reserveStorageUpload;
+  const commit = quota.commit ?? commitStorageUpload;
+  const release = quota.release ?? releaseStorageUpload;
+  let reservationId;
+
+  try {
+    reservationId = await reserve(db, {
+      labId: input.labId,
+      sizeBytes: input.sizeBytes,
+    });
+  } catch (error) {
+    if (error instanceof StorageQuotaError) {
+      throw error;
+    }
+    logMaterialError("material.upload.quota-reserve", error);
+    throw new MaterialOperationError("QUOTA_RESERVATION_FAILED", error);
+  }
 
   try {
     await storage.putObject({
@@ -80,6 +104,7 @@ export async function createMaterial(db, storage, input) {
         : "material.upload.storage-put",
       error,
     );
+    await releaseReservationSafely(release, db, reservationId);
     throw new MaterialOperationError(
       isConfigurationError
         ? "STORAGE_CONFIGURATION_FAILED"
@@ -89,17 +114,15 @@ export async function createMaterial(db, storage, input) {
   }
 
   try {
-    return await db.material.create({
-      data: {
-        labId: input.labId,
-        title: input.title,
-        description: input.description,
-        originalFileName: input.originalFileName,
-        storageKey,
-        contentType: input.contentType,
-        sizeBytes: input.sizeBytes,
-        uploaderId: input.userId,
-      },
+    return await commit(db, reservationId, {
+      labId: input.labId,
+      title: input.title,
+      description: input.description,
+      originalFileName: input.originalFileName,
+      storageKey,
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+      uploaderId: input.userId,
     });
   } catch (error) {
     logMaterialError("material.upload.metadata-create", error);
@@ -110,7 +133,18 @@ export async function createMaterial(db, storage, input) {
       logMaterialError("material.upload.compensation-delete", cleanupError);
     }
 
+    await releaseReservationSafely(release, db, reservationId);
+
     throw new MaterialOperationError("METADATA_CREATE_FAILED", error);
+  }
+}
+
+/** @param {typeof releaseStorageUpload} release @param {PrismaClient} db @param {string} reservationId */
+async function releaseReservationSafely(release, db, reservationId) {
+  try {
+    await release(db, reservationId);
+  } catch (error) {
+    logMaterialError("material.upload.reservation-release", error);
   }
 }
 

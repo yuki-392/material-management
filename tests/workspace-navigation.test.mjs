@@ -35,6 +35,20 @@ test("encodes the Lab id before building navigation links", () => {
   assert.equal(items[2].href, "/labs/lab%2F123/materials");
 });
 
+test("shows the storage administration link only for app administrators", () => {
+  assert.deepEqual(getWorkspaceNavigationItems("lab-123", true).at(-1), {
+    label: "容量管理",
+    href: "/admin/storage",
+    match: "section",
+  });
+  assert.equal(
+    getWorkspaceNavigationItems("lab-123", false).some(
+      (item) => item.href === "/admin/storage",
+    ),
+    false,
+  );
+});
+
 test("marks an exact page or a nested page in the matching section active", () => {
   const [lab, task, materials] = getWorkspaceNavigationItems("lab-123");
 

@@ -4,6 +4,7 @@ import { WorkspaceNavigation } from "@/components/workspace-navigation";
 import { isProfileComplete } from "@/lib/authorization";
 import { getAuthRedirect } from "@/lib/auth-routing.js";
 import { getMissingAuthEnvironmentVariables } from "@/lib/auth-environment.js";
+import { isAppAdminEmail } from "@/lib/storage-quota-core.js";
 import { prisma } from "@/lib/db";
 import Image from "next/image";
 import Link from "next/link";
@@ -125,7 +126,13 @@ export default async function WorkspaceLayout({
           </div>
 
           <div className="mt-4">
-            <WorkspaceNavigation labId={membership?.labId ?? null} />
+            <WorkspaceNavigation
+              isAppAdmin={isAppAdminEmail(
+                session.user.email,
+                process.env.APP_ADMIN_EMAILS,
+              )}
+              labId={membership?.labId ?? null}
+            />
           </div>
         </div>
       </header>

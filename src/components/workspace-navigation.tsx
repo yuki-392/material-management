@@ -8,9 +8,15 @@ import {
   isWorkspaceNavigationItemActive,
 } from "@/lib/workspace-navigation.js";
 
-export function WorkspaceNavigation({ labId }: { labId: string | null }) {
+export function WorkspaceNavigation({
+  labId,
+  isAppAdmin = false,
+}: {
+  labId: string | null;
+  isAppAdmin?: boolean;
+}) {
   const pathname = usePathname();
-  const items = getWorkspaceNavigationItems(labId);
+  const items = getWorkspaceNavigationItems(labId, isAppAdmin);
 
   return (
     <nav aria-label="メインナビゲーション" className="border-t border-slate-200 pt-3">

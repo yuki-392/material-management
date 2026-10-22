@@ -6,6 +6,7 @@ import {
 } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
 import { listLabMaterials } from "@/lib/material-core.js";
+import { getLabStorageUsage } from "@/lib/storage-quota-core.js";
 import {
   ButtonLink,
   Card,
@@ -44,6 +45,13 @@ export default async function MaterialsPage({
   const materials = await listLabMaterials(prisma, {
     labId: access.labId,
   });
+  const storageUsage = await getLabStorageUsage(prisma, access.labId);
+  const uploadBlocked = storageUsage.state.full || storageUsage.globalState.full;
+  const uploadBlockedMessage = storageUsage.state.full
+    ? "この研究室の保存容量に達したため、資料を追加できません。不要な資料を削除するか、管理者に割当変更を依頼してください。"
+    : storageUsage.globalState.full
+      ? "アプリ全体の保存上限に達したため、資料を追加できません。管理者にお問い合わせください。"
+      : undefined;
 
   return (
     <div className="space-y-7 sm:space-y-8">
@@ -58,6 +66,57 @@ export default async function MaterialsPage({
         }
       />
 
+      <Card aria-labelledby="storage-usage-heading">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-indigo-700">容量の目安</p>
+            <h2
+              className="mt-1 text-xl font-bold text-slate-950"
+              id="storage-usage-heading"
+            >
+              この研究室の保存量
+            </h2>
+          </div>
+          <p className="text-sm font-semibold tabular-nums text-slate-700">
+            {formatStorageGb(storageUsage.usedBytes)} / {formatStorageGb(storageUsage.limitBytes)}
+          </p>
+        </div>
+        <div
+          aria-label="研究室の保存容量使用率"
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={Math.min(storageUsage.state.percentUsed, 100)}
+          className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-200"
+          role="meter"
+        >
+          <div
+            className={`h-full rounded-full ${storageUsage.state.warning || storageUsage.state.full ? "bg-amber-500" : "bg-indigo-600"}`}
+            style={{ width: `${Math.min(storageUsage.state.percentUsed, 100)}%` }}
+          />
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          割当の {storageUsage.state.percentUsed}% を使用中
+        </p>
+        {storageUsage.state.warning || storageUsage.state.full ? (
+          <p
+            className={`mt-3 rounded-xl px-4 py-3 text-sm leading-5 ${storageUsage.state.full ? "border border-rose-200 bg-rose-50 text-rose-900" : "border border-amber-200 bg-amber-50 text-amber-950"}`}
+            role={storageUsage.state.full ? "alert" : "status"}
+          >
+            {storageUsage.state.full
+              ? "研究室の割当上限に達しています。資料を追加するには不要な資料を削除するか、管理者に割当変更を依頼してください。"
+              : "保存容量が割当の80%に達しています。不要な資料を整理するか、管理者にご相談ください。"}
+          </p>
+        ) : null}
+        {storageUsage.globalState.full ? (
+          <p
+            className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-5 text-rose-900"
+            role="alert"
+          >
+            アプリ全体の保存上限に達しているため、すべての研究室でアップロードを停止しています。
+          </p>
+        ) : null}
+      </Card>
+
       <Card aria-labelledby="material-upload-heading" id="material-upload">
         <p className="text-sm font-semibold text-indigo-700">ファイル共有</p>
         <h2
@@ -69,7 +128,11 @@ export default async function MaterialsPage({
         <p className="mt-1 text-sm leading-6 text-slate-600">
           対応形式はPDF、DOCX、PPTX、XLSX、JPEG、PNGです。
         </p>
-        <MaterialUploadForm labId={access.labId} />
+        <MaterialUploadForm
+          labId={access.labId}
+          uploadBlocked={uploadBlocked}
+          uploadBlockedMessage={uploadBlockedMessage}
+        />
       </Card>
 
       <Card aria-labelledby="materials-list-heading">
@@ -219,6 +282,10 @@ function formatFileSize(sizeBytes: number) {
   }
 
   return `${(sizeBytes / 1024).toFixed(1)} KiB`;
+}
+
+function formatStorageGb(bytes: bigint) {
+  return `${(Number(bytes) / 1_000_000_000).toFixed(2)} GB`;
 }
 
 function formatDate(date: Date) {

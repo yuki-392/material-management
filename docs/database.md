@@ -1,6 +1,6 @@
 # DB設計案
 
-更新日: 2026-09-29
+更新日: 2026-10-22
 
 状態: 実装中の設計
 
@@ -22,6 +22,7 @@ erDiagram
     Lab ||--o{ Task : contains
     User o|--o{ Task : assigned_to
     Lab ||--o{ Material : stores
+    Lab ||--o{ StorageReservation : reserves
     User o|--o{ Material : uploaded_by
     User ||--o{ Account : authenticates_with
     User ||--o{ Session : has
@@ -50,9 +51,18 @@ Adapterモデルは公式のPrisma Adapterスキーマに合わせる。
 
 ### Lab
 
-- `id`、`name`、`ownerId`、`createdAt`、`updatedAt`
+- `id`、`name`、`ownerId`、`storageLimitBytes`、`createdAt`、`updatedAt`
+- `storageLimitBytes` はLabに割り当てた10進byte単位の容量。既定値は1,000,000,000 bytes。移行時は既存Materialの合計サイズを下回らないように設定する。
 - `ownerId` はUserへの必須外部キーで、削除は `Restrict` する。Ownerは独立したroleテーブルではなく `Lab.ownerId` で表す。
 - DB単体では `ownerId` の重複を禁止しない。アプリケーションはLab未所属Userだけに作成を許可し、LabとOwnerの `LabMember` を同じトランザクションで作る。これにより通常の作成経路ではUserがOwnerになれるLabも最大1つとなる。
+- Lab数は累計8件、Lab割当合計は8,000,000,000 bytes、アプリ全体のアップロード上限は9,000,000,000 bytesとする。アプリ全体上限との差1GBはストレージ側の未計上データ等に備える。
+
+### StorageQuotaControl と StorageReservation
+
+- `StorageQuotaControl` は単一の`global`行で作成済みLab数、割当合計、有効な予約byte数を持つ。Lab作成・割当変更・アップロード予約は、この行を更新してDB上で直列化する。
+- `StorageReservation` はアップロード前に予約したLab ID、サイズ、期限を保存する。ストレージ保存・Material登録が完了したら同一DBトランザクションでMaterial行に置き換え、失敗時は解除する。
+- 予約期限は15分。次のアップロード予約時に期限切れ行を削除し、予約byte数から差し引く。期限後に保存処理が完了した場合もMaterial登録を拒否して予約を解放し、ストレージ側の補償削除を試みる。
+- これらのカウンターはDBトランザクションと同じ単位で更新する。Material削除はカウンターを直接変更せず、使用量集計は登録Materialサイズから再計算する。
 
 ### LabMember
 

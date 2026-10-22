@@ -2,30 +2,37 @@
 
 /**
  * @param {string | null} labId
+ * @param {boolean} [isAppAdmin]
  * @returns {WorkspaceNavigationItem[]}
  */
-export function getWorkspaceNavigationItems(labId) {
+export function getWorkspaceNavigationItems(labId, isAppAdmin = false) {
   const items = [{ label: "Lab", href: "/labs", match: "exact" }];
 
-  if (!labId) {
-    return items;
+  if (labId) {
+    const encodedLabId = encodeURIComponent(labId);
+    items.push(
+      {
+        label: "Task",
+        href: `/labs/${encodedLabId}/tasks`,
+        match: "section",
+      },
+      {
+        label: "資料",
+        href: `/labs/${encodedLabId}/materials`,
+        match: "section",
+      },
+    );
   }
 
-  const encodedLabId = encodeURIComponent(labId);
+  if (isAppAdmin) {
+    items.push({
+      label: "容量管理",
+      href: "/admin/storage",
+      match: "section",
+    });
+  }
 
-  return [
-    ...items,
-    {
-      label: "Task",
-      href: `/labs/${encodedLabId}/tasks`,
-      match: "section",
-    },
-    {
-      label: "資料",
-      href: `/labs/${encodedLabId}/materials`,
-      match: "section",
-    },
-  ];
+  return items;
 }
 
 /**

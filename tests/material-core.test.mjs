@@ -9,6 +9,25 @@ import {
   getMaterialFile,
   listLabMaterials,
 } from "../src/lib/material-core.js";
+import { StorageQuotaError } from "../src/lib/storage-quota-core.js";
+
+function createTestQuota(operations = []) {
+  return {
+    reserve: async () => {
+      operations.push("quota-reserve");
+      return "reservation-1";
+    },
+    commit: async (db, reservationId, data) => {
+      assert.equal(reservationId, "reservation-1");
+      return db.material.create({ data });
+    },
+    release: async (_db, reservationId) => {
+      assert.equal(reservationId, "reservation-1");
+      operations.push("quota-release");
+      return true;
+    },
+  };
+}
 
 function materialRow(overrides = {}) {
   return {
@@ -80,12 +99,49 @@ test("uploads with a server-created key and the session uploader id", async () =
     sizeBytes: 3,
     body: new Uint8Array([1, 2, 3]),
     storageKey: "client-controlled-key",
-  });
+  }, createTestQuota(operations));
 
-  assert.deepEqual(operations, ["storage-put", "database-create"]);
+  assert.deepEqual(operations, ["quota-reserve", "storage-put", "database-create"]);
   assert.equal(createdData.uploaderId, "session-user");
   assert.notEqual(createdData.storageKey, "client-controlled-key");
   assert.match(createdData.storageKey, /^labs\/lab-1\/materials\//);
+});
+
+test("rejects a quota-limited upload before writing to storage", async () => {
+  let storageCalled = false;
+  const quota = {
+    reserve: async () => {
+      throw new StorageQuotaError("LAB_QUOTA_EXCEEDED");
+    },
+    commit: async () => assert.fail("quota-limited upload cannot commit"),
+    release: async () => assert.fail("no reservation was created"),
+  };
+  const storage = {
+    putObject: async () => {
+      storageCalled = true;
+    },
+    deleteObject: async () => {},
+  };
+
+  await assert.rejects(
+    createMaterial(
+      { material: { create: async () => assert.fail("DB must not be called") } },
+      storage,
+      {
+        labId: "lab-1",
+        userId: "user-1",
+        title: "Lab notes",
+        description: null,
+        originalFileName: "paper.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 4,
+        body: new Uint8Array([1, 2, 3, 4]),
+      },
+      quota,
+    ),
+    (error) => error instanceof StorageQuotaError && error.code === "LAB_QUOTA_EXCEEDED",
+  );
+  assert.equal(storageCalled, false);
 });
 
 test("compensates a failed metadata insert by deleting the uploaded object", async () => {
@@ -117,7 +173,7 @@ test("compensates a failed metadata insert by deleting the uploaded object", asy
         contentType: "application/pdf",
         sizeBytes: 3,
         body: new Uint8Array([1, 2, 3]),
-      }),
+      }, createTestQuota(operations)),
       (error) =>
         error instanceof MaterialOperationError &&
         error.code === "METADATA_CREATE_FAILED" &&
@@ -127,12 +183,14 @@ test("compensates a failed metadata insert by deleting the uploaded object", asy
     console.error = originalConsoleError;
   }
 
-  assert.equal(operations[0].startsWith("storage-put:labs/lab-1/materials/"), true);
-  assert.equal(operations[1], "database-create");
+  assert.equal(operations[0], "quota-reserve");
+  assert.equal(operations[1].startsWith("storage-put:labs/lab-1/materials/"), true);
+  assert.equal(operations[2], "database-create");
   assert.equal(
-    operations[2],
-    `storage-delete:${operations[0].slice("storage-put:".length)}`,
+    operations[3],
+    `storage-delete:${operations[1].slice("storage-put:".length)}`,
   );
+  assert.equal(operations[4], "quota-release");
   assert.deepEqual(logs, [
     ["Material operation failed.", { stage: "material.upload.metadata-create", name: "Error" }],
   ]);
@@ -169,7 +227,7 @@ test("tags storage upload failures and skips metadata creation", async () => {
         contentType: "application/pdf",
         sizeBytes: 3,
         body: new Uint8Array([1, 2, 3]),
-      }),
+      }, createTestQuota()),
       (error) =>
         error instanceof MaterialOperationError &&
         error.code === "STORAGE_UPLOAD_FAILED" &&
@@ -210,7 +268,7 @@ test("logs storage configuration failures separately from object upload failures
         contentType: "application/pdf",
         sizeBytes: 3,
         body: new Uint8Array([1, 2, 3]),
-      }),
+      }, createTestQuota()),
       (error) =>
         error instanceof MaterialOperationError &&
         error.code === "STORAGE_CONFIGURATION_FAILED" &&
@@ -269,7 +327,7 @@ test("logs safe context when upload compensation fails", async () => {
         contentType: "application/pdf",
         sizeBytes: 3,
         body: new Uint8Array([1, 2, 3]),
-      }),
+      }, createTestQuota(operations)),
       (error) =>
         error instanceof MaterialOperationError &&
         error.code === "METADATA_CREATE_FAILED",
@@ -278,7 +336,13 @@ test("logs safe context when upload compensation fails", async () => {
     console.error = originalConsoleError;
   }
 
-  assert.deepEqual(operations, ["storage-put", "database-create", "storage-delete"]);
+  assert.deepEqual(operations, [
+    "quota-reserve",
+    "storage-put",
+    "database-create",
+    "storage-delete",
+    "quota-release",
+  ]);
   assert.equal(logs.length, 2);
   assert.deepEqual(logs[0][1], {
     stage: "material.upload.metadata-create",

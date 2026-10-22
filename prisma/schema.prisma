@@ -75,18 +75,40 @@ model VerificationToken {
 }
 
 model Lab {
-  id        String   @id @default(cuid())
-  name      String
-  ownerId   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(cuid())
+  name              String
+  ownerId           String
+  storageLimitBytes BigInt   @default(1000000000)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  owner     User        @relation("LabOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  members   LabMember[]
-  tasks     Task[]
-  materials Material[]
+  owner              User                @relation("LabOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members            LabMember[]
+  tasks              Task[]
+  materials          Material[]
+  storageReservations StorageReservation[]
 
   @@index([ownerId])
+}
+
+model StorageQuotaControl {
+  id             String @id
+  labCount       Int
+  allocatedBytes BigInt
+  reservedBytes  BigInt @default(0)
+}
+
+model StorageReservation {
+  id        String   @id @default(cuid())
+  labId     String
+  sizeBytes BigInt
+  expiresAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  lab Lab @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId, expiresAt])
+  @@index([expiresAt])
 }
 
 model LabMember {

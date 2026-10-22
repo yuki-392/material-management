@@ -10,6 +10,7 @@
     "lint": "eslint",
     "storage:setup": "node scripts/ensure-local-material-bucket.mjs",
     "db:generate": "prisma generate",
+    "db:migrate:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate"
   },
   "dependencies": {

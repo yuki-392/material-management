@@ -10,6 +10,8 @@ function createFakeDatabase({
   existingMemberships = [],
   failMembershipCreation = false,
   simulateMembershipRace = false,
+  labCount = 0,
+  allocatedBytes = 0n,
 } = {}) {
   const state = {
     labs: [],
@@ -17,6 +19,7 @@ function createFakeDatabase({
   };
   const calls = [];
   let nextLabId = 1;
+  const control = { labCount, allocatedBytes };
 
   const db = {
     async $transaction(callback) {
@@ -25,6 +28,23 @@ function createFakeDatabase({
       const pendingMemberships = [];
 
       const tx = {
+        storageQuotaControl: {
+          async findUnique() {
+            return { ...control };
+          },
+          async updateMany(args) {
+            calls.push(["control.updateMany", args]);
+            if (
+              control.labCount >= args.where.labCount.lt ||
+              control.allocatedBytes > args.where.allocatedBytes.lte
+            ) {
+              return { count: 0 };
+            }
+            control.labCount += args.data.labCount.increment;
+            control.allocatedBytes += args.data.allocatedBytes.increment;
+            return { count: 1 };
+          },
+        },
         labMember: {
           async findUnique(args) {
             calls.push(["findUnique", args]);
@@ -79,27 +99,86 @@ function createFakeDatabase({
     },
   };
 
-  return { db, state, calls };
+  return { db, state, calls, control };
 }
 
 test("creates the Lab and owner membership in one transaction", async () => {
-  const { db, state, calls } = createFakeDatabase();
+  const { db, state, calls, control } = createFakeDatabase();
 
   const result = await createLabWithOwner(db, "user-1", "Vision Lab");
 
   assert.deepEqual(result, { id: "lab-1" });
   assert.equal(calls.filter((call) => call === "transaction").length, 1);
   assert.deepEqual(state.labs, [
-    { id: "lab-1", name: "Vision Lab", ownerId: "user-1" },
+    {
+      id: "lab-1",
+      name: "Vision Lab",
+      ownerId: "user-1",
+      storageLimitBytes: 1_000_000_000n,
+    },
   ]);
   assert.deepEqual(state.memberships, [
     { labId: "lab-1", userId: "user-1" },
   ]);
+  assert.deepEqual(control, {
+    labCount: 1,
+    allocatedBytes: 1_000_000_000n,
+  });
   assert.deepEqual(calls.slice(1).map((call) => call[0]), [
     "findUnique",
+    "control.updateMany",
     "lab.create",
     "member.create",
   ]);
+});
+
+test("rejects Lab creation after eight lifetime slots have been used", async () => {
+  const { db, state, control } = createFakeDatabase({ labCount: 8 });
+
+  await assert.rejects(
+    createLabWithOwner(db, "user-1", "Ninth Lab"),
+    (error) =>
+      error instanceof LabCreationError && error.code === "LAB_LIMIT_REACHED",
+  );
+  assert.deepEqual(state.labs, []);
+  assert.deepEqual(control, { labCount: 8, allocatedBytes: 0n });
+});
+
+test("rejects Lab creation when a full one-GB allocation is unavailable", async () => {
+  const { db, state, control } = createFakeDatabase({
+    labCount: 7,
+    allocatedBytes: 7_500_000_001n,
+  });
+
+  await assert.rejects(
+    createLabWithOwner(db, "user-1", "Another Lab"),
+    (error) =>
+      error instanceof LabCreationError &&
+      error.code === "STORAGE_CAPACITY_UNAVAILABLE",
+  );
+  assert.deepEqual(state.labs, []);
+  assert.deepEqual(control, { labCount: 7, allocatedBytes: 7_500_000_001n });
+});
+
+test("serializes concurrent Lab creation at the final count and allocation slot", async () => {
+  const { db, state, control } = createFakeDatabase({
+    labCount: 7,
+    allocatedBytes: 7_000_000_000n,
+  });
+
+  const results = await Promise.allSettled([
+    createLabWithOwner(db, "user-1", "Lab one"),
+    createLabWithOwner(db, "user-2", "Lab two"),
+  ]);
+
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(
+    results.find((result) => result.status === "rejected").reason.code,
+    "LAB_LIMIT_REACHED",
+  );
+  assert.equal(state.labs.length, 1);
+  assert.equal(state.memberships.length, 1);
+  assert.deepEqual(control, { labCount: 8, allocatedBytes: 8_000_000_000n });
 });
 
 test("rejects a User who already has a Lab membership", async () => {

@@ -23,6 +23,7 @@ import {
 } from "@/lib/material-storage";
 import { logMaterialError } from "@/lib/material-error-logging.js";
 import type { MaterialFormState } from "@/lib/material-form-state";
+import { StorageQuotaError } from "@/lib/storage-quota-core.js";
 
 export async function uploadMaterialAction(
   _previousState: MaterialFormState,
@@ -84,6 +85,21 @@ export async function uploadMaterialAction(
       },
     );
   } catch (error) {
+    if (error instanceof StorageQuotaError) {
+      if (error.code === "LAB_QUOTA_EXCEEDED") {
+        return {
+          formError:
+            "この研究室の保存容量に達したため、資料を追加できません。管理者にお問い合わせください。",
+        };
+      }
+      if (error.code === "GLOBAL_QUOTA_EXCEEDED") {
+        return {
+          formError:
+            "アプリ全体の保存上限に達したため、資料を追加できません。管理者にお問い合わせください。",
+        };
+      }
+    }
+
     if (!(error instanceof MaterialOperationError)) {
       logMaterialError("material.upload.unclassified", error);
     }
