@@ -1,3 +1,4 @@
+import Form from "next/form";
 import { notFound, redirect } from "next/navigation";
 
 import {
@@ -169,10 +170,10 @@ export default async function LabTasksPage({
           </span>
         </div>
 
-        <form
+        <Form
           action={tasksPath}
           className="mt-5 grid gap-4 border-y border-slate-200 py-5 md:grid-cols-2 xl:grid-cols-4"
-          method="get"
+          scroll={false}
         >
           <div className="md:col-span-2">
             <label
@@ -234,11 +235,11 @@ export default async function LabTasksPage({
           </div>
           <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-4">
             <Button type="submit">検索</Button>
-            <ButtonLink href={tasksPath} variant="secondary">
+            <ButtonLink href={tasksPath} scroll={false} variant="secondary">
               条件をクリア
             </ButtonLink>
           </div>
-        </form>
+        </Form>
 
         {tasks.totalCount === 0 ? (
           <div className="mt-5">
@@ -256,6 +257,7 @@ export default async function LabTasksPage({
               action={
                 <ButtonLink
                   href={hasActiveFilters ? tasksPath : "#create-task"}
+                  scroll={!hasActiveFilters}
                   variant="secondary"
                 >
                   {hasActiveFilters ? "条件をクリア" : "作成フォームへ"}

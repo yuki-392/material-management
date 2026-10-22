@@ -1,3 +1,4 @@
+import Form from "next/form";
 import { notFound, redirect } from "next/navigation";
 
 import {
@@ -80,6 +81,7 @@ export default async function MaterialsPage({
     materials.page * LIST_PAGE_SIZE,
     materials.totalCount,
   );
+  const hasActiveFilters = Boolean(filters.query || filters.type);
 
   return (
     <div className="space-y-7 sm:space-y-8">
@@ -179,10 +181,10 @@ export default async function MaterialsPage({
           </span>
         </div>
 
-        <form
+        <Form
           action={materialsPath}
           className="mt-5 grid gap-4 border-y border-slate-200 py-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(12rem,1fr)_auto] lg:items-end"
-          method="get"
+          scroll={false}
         >
           <div>
             <label
@@ -224,35 +226,36 @@ export default async function MaterialsPage({
           </div>
           <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-1">
             <Button type="submit">検索</Button>
-            <ButtonLink href={materialsPath} variant="secondary">
+            <ButtonLink href={materialsPath} scroll={false} variant="secondary">
               条件をクリア
             </ButtonLink>
           </div>
-        </form>
+        </Form>
 
         {materials.totalCount === 0 ? (
           <div className="mt-5">
             <EmptyState
               title={
-                filters.query || filters.type
+                hasActiveFilters
                   ? "条件に一致する資料はありません"
                   : "まだ資料はありません"
               }
               description={
-                filters.query || filters.type
+                hasActiveFilters
                   ? "検索語やファイル形式を変更してください。"
                   : "最初の資料を登録すると、Labメンバーが認証付きで閲覧・ダウンロードできます。"
               }
               action={
                 <ButtonLink
                   href={
-                    filters.query || filters.type
+                    hasActiveFilters
                       ? materialsPath
                       : "#material-upload"
                   }
+                  scroll={!hasActiveFilters}
                   variant="secondary"
                 >
-                  {filters.query || filters.type ? "条件をクリア" : "資料の登録へ"}
+                  {hasActiveFilters ? "条件をクリア" : "資料の登録へ"}
                 </ButtonLink>
               }
             />
