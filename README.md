@@ -19,7 +19,7 @@
 | UI | Tailwind CSS 4 |
 | 認証 | Auth.js（`next-auth` v5 beta）、Google OAuth、Prisma Adapter |
 | DB | Prisma ORM 7、PostgreSQL 18（ローカル）、Neon（本番） |
-| ファイルストレージ | AWS SDK for JavaScript v3（S3 Client）、SeaweedFS 4.48（ローカル）、S3互換オブジェクトストレージ（本番） |
+| ファイルストレージ | Backblaze B2（本番）、SeaweedFS 4.48（ローカル）、AWS SDK for JavaScript v3（S3互換APIの接続クライアント） |
 | 開発環境 | Docker Compose、npm |
 
 ## 工夫
@@ -28,7 +28,7 @@
 
 - **認証と認可を分ける** — Googleログインは本人確認に使い、LabのデータはそのLabのメンバーだけが扱えます。メンバー管理はOwnerに限定します。
 - **所属とデータの整合性を保つ** — `LabMember.userId` の一意制約で1人1Labを表し、LabとOwnerの所属行は同じトランザクションで作成します。メンバー削除時は担当Taskの解除と所属削除を一緒に行います。
-- **DBとファイルストレージを分ける** — PostgreSQLにはMaterialのメタデータを保存し、ファイル本体はprivateなS3互換ストレージに保存します。ストレージキーはサーバーで生成します。
+- **DBとファイルストレージを分ける** — PostgreSQLにはMaterialのメタデータを保存し、ファイル本体はローカル開発ではSeaweedFS、本番ではBackblaze B2に保存します。どちらもS3互換APIで接続し、ストレージキーはサーバーで生成します。
 - **更新内容をサーバーで検証する** — Server Actionで入力を検証し、対象Labの所属やOwner権限をサーバー側で確認します。
 
 ## 苦労（実装上の課題）
@@ -89,9 +89,9 @@ Vercel / Next.js App Router
   ├─ Server Components / Server Actions
   │      └─ Prisma ── PostgreSQL（ローカル: Docker Compose / 本番: Neon）
   └─ Material Route Handler
-         └─ AWS SDK for JavaScript (S3)
+         └─ S3互換API（AWS SDK for JavaScript v3で接続）
                 ├─ ローカル: SeaweedFS
-                └─ 本番: privateなS3互換オブジェクトストレージ
+                └─ 本番: Backblaze B2
 ```
 
 画面の読み取りは主にServer Components、更新はServer Actionsで行います。Materialのファイル取得は認可を確認するRoute Handlerを通します。
@@ -101,13 +101,13 @@ Vercel / Next.js App Router
 - **公開URL** — [https://material-management-orpin.vercel.app/](https://material-management-orpin.vercel.app/)
 - **Webアプリ** — VercelでNext.jsアプリを実行します。
 - **データベース** — NeonのPostgreSQLを使い、Prisma Migrateでスキーマを管理します。
-- **ファイル** — ファイル本体はprivateなS3互換オブジェクトストレージに保存します。アプリはサーバー側のAWS SDKから接続し、PostgreSQLにはMaterialのメタデータとストレージキーを保存します。バケットは事前に作成し、実行用認証情報には必要なオブジェクト操作権限だけを付与します。接続先・認証情報は`S3_ENDPOINT`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET`、`S3_REGION`で設定します。
+- **ファイル** — ファイル本体はBackblaze B2のprivateなバケットに保存します。アプリはAWS SDK for JavaScript v3からBackblaze B2のS3互換APIへ接続し、PostgreSQLにはMaterialのメタデータとストレージキーを保存します。バケットは事前に作成し、実行用認証情報には必要なオブジェクト操作権限だけを付与します。接続先・認証情報は`S3_ENDPOINT`、`S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY`、`S3_BUCKET`、`S3_REGION`で設定します。環境変数名の`S3`は接続APIを表し、保存先がAWSであることを示すものではありません。
 - **環境変数** — 本番用のDB・OAuth・ストレージ設定はVercelの環境変数として管理します。値をリポジトリに保存しません。
 - **容量上限** — 資料のDB登録サイズを基にアプリ全体9GB、Lab割当合計8GBで制御します。割当の80%で警告し、全体またはLabの上限に達すると新規アップロードを停止します。旧バージョンやDBに登録されていないオブジェクトはアプリの使用量に含みません。
 
 容量管理のDB変更を含むリリースでは、対象DBの`DATABASE_URL`を設定した安全な環境から`npm run db:migrate:deploy`を先に実行してからアプリをデプロイします。VercelのProduction環境変数には、管理画面を使うGoogleメールアドレスを`APP_ADMIN_EMAILS`へカンマ区切りで設定します。
 
-ローカル開発ではDocker ComposeのPostgreSQLとSeaweedFSを使います。本番ストレージも同じS3互換APIで接続し、SeaweedFSはローカル開発用です。
+ローカル開発ではDocker ComposeのPostgreSQLとSeaweedFSを使います。本番はBackblaze B2を同じS3互換APIで接続し、SeaweedFSはローカル開発用です。
 
 ## DB設計
 
