@@ -1,3 +1,5 @@
+import type { TaskStatusValue } from "./task-validation.js";
+
 export type TaskFieldName =
   | "title"
   | "description"
@@ -7,6 +9,12 @@ export type TaskFieldName =
 
 export type TaskFormState = {
   fieldErrors?: Partial<Record<TaskFieldName, string>>;
+  formError?: string;
+};
+
+export type TaskStatusFormState = {
+  status?: TaskStatusValue;
+  success?: string;
   formError?: string;
 };
 

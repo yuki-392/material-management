@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import {
@@ -9,14 +9,19 @@ import {
 } from "@/lib/authorization";
 import { getMissingAuthEnvironmentVariables } from "@/lib/auth-environment.js";
 import { prisma } from "@/lib/db";
-import type { TaskFormState } from "@/lib/task-form-state";
+import type {
+  TaskFormState,
+  TaskStatusFormState,
+} from "@/lib/task-form-state";
 import {
   TaskOperationError,
   createTask,
   deleteTask,
   updateTask,
+  updateTaskStatus,
 } from "@/lib/task-core.js";
-import { validateTaskInput } from "@/lib/task-validation.js";
+import { validateTaskInput, type TaskStatusValue } from "@/lib/task-validation.js";
+import { parseTaskStatus } from "@/lib/list-query.js";
 
 export async function createTaskAction(
   _previousState: TaskFormState,
@@ -29,7 +34,7 @@ export async function createTaskAction(
 
   const access = await getTaskLabAccess(labId);
   if (!access) {
-    return { formError: "このLabのTaskを操作できません。ページを再読み込みしてください。" };
+    return { formError: "このLabのタスクを操作できません。ページを再読み込みしてください。" };
   }
 
   const validation = validateTaskInput({
@@ -64,12 +69,12 @@ export async function updateTaskAction(
 
   const access = await getTaskLabAccess(labId);
   if (!access) {
-    return { formError: "このLabのTaskを操作できません。ページを再読み込みしてください。" };
+    return { formError: "このLabのタスクを操作できません。ページを再読み込みしてください。" };
   }
 
   const taskId = readString(formData.get("taskId"));
   if (!taskId || taskId.length > 100) {
-    return { formError: "Taskを確認できませんでした。ページを再読み込みしてください。" };
+    return { formError: "タスクを確認できませんでした。ページを再読み込みしてください。" };
   }
 
   const validation = validateTaskInput({
@@ -93,6 +98,49 @@ export async function updateTaskAction(
   refreshTaskList(access.labId);
 }
 
+export async function updateTaskStatusAction(
+  previousState: TaskStatusFormState,
+  formData: FormData,
+): Promise<TaskStatusFormState> {
+  const labId = readString(formData.get("labId"));
+  if (!labId) {
+    return getTaskStatusError(previousState, "Labを確認できませんでした。ページを再読み込みしてください。");
+  }
+
+  const access = await getTaskLabAccess(labId);
+  if (!access) {
+    return getTaskStatusError(previousState, "このLabのタスクを操作できません。ページを再読み込みしてください。");
+  }
+
+  const taskId = readString(formData.get("taskId"));
+  if (!taskId || taskId.length > 100) {
+    return getTaskStatusError(previousState, "タスクを確認できませんでした。ページを再読み込みしてください。");
+  }
+
+  const status =
+    formData.get("markDone") === "true"
+      ? "DONE"
+      : parseTaskStatus(formData.get("status"));
+  if (!status) {
+    return getTaskStatusError(previousState, "状態を確認できませんでした。再度選択してください。");
+  }
+  const validatedStatus = status as TaskStatusValue;
+
+  try {
+    await updateTaskStatus(prisma, access.labId, taskId, validatedStatus);
+  } catch (error) {
+    if (error instanceof TaskOperationError && error.code === "TASK_NOT_FOUND") {
+      return getTaskStatusError(previousState, "このタスクを確認できませんでした。ページを再読み込みしてください。");
+    }
+
+    return getTaskStatusError(previousState, "状態を更新できませんでした。時間をおいて再度お試しください。");
+  }
+
+  revalidatePath(`/labs/${encodeURIComponent(access.labId)}/tasks`);
+  refresh();
+  return { success: "タスクの状態を更新しました。", status: validatedStatus };
+}
+
 export async function deleteTaskAction(
   _previousState: TaskFormState,
   formData: FormData,
@@ -104,12 +152,12 @@ export async function deleteTaskAction(
 
   const access = await getTaskLabAccess(labId);
   if (!access) {
-    return { formError: "このLabのTaskを操作できません。ページを再読み込みしてください。" };
+    return { formError: "このLabのタスクを操作できません。ページを再読み込みしてください。" };
   }
 
   const taskId = readString(formData.get("taskId"));
   if (!taskId || taskId.length > 100) {
-    return { formError: "Taskを確認できませんでした。ページを再読み込みしてください。" };
+    return { formError: "タスクを確認できませんでした。ページを再読み込みしてください。" };
   }
 
   try {
@@ -166,13 +214,23 @@ function getTaskOperationError(
 
     if (error.code === "TASK_NOT_FOUND") {
       return {
-        formError: "Taskを確認できませんでした。ページを再読み込みしてください。",
+        formError: "このタスクを確認できませんでした。ページを再読み込みしてください。",
       };
     }
   }
 
   return {
-    formError: `Taskを${operation}できませんでした。時間をおいて再度お試しください。`,
+    formError: `タスクを${operation}できませんでした。時間をおいて再度お試しください。`,
+  };
+}
+
+function getTaskStatusError(
+  previousState: TaskStatusFormState,
+  message: string,
+): TaskStatusFormState {
+  return {
+    formError: message,
+    ...(previousState.status ? { status: previousState.status } : {}),
   };
 }
 

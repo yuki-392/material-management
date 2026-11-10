@@ -9,7 +9,7 @@ import type {
 export type ButtonVariant = "primary" | "secondary" | "danger";
 
 const buttonBaseClassName =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-55";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-[transform,background-color,border-color,color,box-shadow] duration-150 motion-safe:hover:-translate-y-px motion-safe:active:translate-y-0 motion-safe:active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-55 disabled:shadow-none";
 
 const buttonVariantClassNames: Record<ButtonVariant, string> = {
   primary: "bg-indigo-700 text-white hover:bg-indigo-800 active:bg-indigo-900",
@@ -31,14 +31,14 @@ export function getButtonClassName(
 }
 
 export const controlClassName =
-  "min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:border-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500";
+  "min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 transition-[border-color,box-shadow] duration-150 focus-visible:border-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 sm:text-sm";
 
 export const inputClassName = `mt-2 ${controlClassName}`;
 
 export const selectClassName = inputClassName;
 
 export const textareaClassName =
-  "mt-2 min-h-28 w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-6 text-slate-900 placeholder:text-slate-400 focus-visible:border-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500";
+  "mt-2 min-h-28 w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-base leading-6 text-slate-900 placeholder:text-slate-400 focus-visible:border-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 sm:text-sm";
 
 export function Button({
   variant = "primary",
@@ -71,7 +71,7 @@ export function Card({
   return (
     <section
       className={joinClassNames(
-        "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7",
+        "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-[transform,box-shadow,border-color] duration-200 motion-safe:hover:-translate-y-0.5 hover:border-indigo-100 hover:shadow-md sm:p-7",
         className,
       )}
       {...props}
@@ -164,7 +164,7 @@ const taskStatusStyles = {
 } as const;
 
 const taskStatusLabels = {
-  TODO: "TODO・未着手",
+  TODO: "未着手",
   IN_PROGRESS: "進行中",
   DONE: "完了",
 } as const;

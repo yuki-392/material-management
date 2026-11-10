@@ -2,20 +2,44 @@
 
 :root {
   color-scheme: light;
-  --background: #f8fafc;
+  --background: #f7f8fd;
   --foreground: #0f172a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Hiragino Kaku Gothic ProN", Meiryo, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), "Hiragino Kaku Gothic ProN", Meiryo,
+  font-family: "Hiragino Kaku Gothic ProN", Meiryo, ui-sans-serif, system-ui,
     sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+.app-shell {
+  background-color: #f7f8fd;
+  background-image:
+    radial-gradient(ellipse at 8% 0%, rgb(224 231 255 / 72%), transparent 31rem),
+    radial-gradient(ellipse at 96% 14%, rgb(209 250 229 / 26%), transparent 30rem);
+}
+
+::selection {
+  background: #c7d2fe;
+  color: #1e1b4b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

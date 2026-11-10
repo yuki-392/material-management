@@ -41,7 +41,7 @@ export default async function LoginPage() {
 
   return (
     <main
-      className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10 sm:py-16"
+      className="app-shell flex min-h-screen items-center justify-center px-4 py-10 sm:py-16"
       id="main-content"
       tabIndex={-1}
     >
@@ -66,6 +66,12 @@ export default async function LoginPage() {
         <p className="mt-2 text-sm leading-6 text-slate-600">
           研究室のタスクと資料を、メンバーと一緒に管理できます。Googleアカウントでログインしてください。
         </p>
+
+        <ol className="mt-5 grid gap-2 rounded-xl bg-indigo-50/70 p-3 text-xs text-indigo-950">
+          <li><span className="font-bold">1.</span> Googleでログイン</li>
+          <li><span className="font-bold">2.</span> プロフィールを登録</li>
+          <li><span className="font-bold">3.</span> Labを作成・参加</li>
+        </ol>
 
         {missingEnvironmentVariables.length > 0 ? (
           <div className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="status">

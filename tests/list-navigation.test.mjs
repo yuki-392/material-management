@@ -15,7 +15,7 @@ function expectMatch(source, pattern, description) {
   assert.ok(pattern.test(source), description);
 }
 
-test("task search and clear navigation preserve scroll position", () => {
+test("task filters keep URL state and the task creation disclosure stays compact", () => {
   expectMatch(taskPage, /import Form from "next\/form";/, "use Next Form");
   expectMatch(
     taskPage,
@@ -24,17 +24,22 @@ test("task search and clear navigation preserve scroll position", () => {
   );
   expectMatch(
     taskPage,
-    /<ButtonLink\s+href=\{tasksPath\}\s+scroll=\{false\}\s+variant="secondary">\s*条件をクリア/,
-    "task filter clear preserves scroll position",
+    /<ButtonLink\s+href=\{tasksPath\}\s+scroll=\{false\}\s+variant="secondary">\s*クリア/,
+    "task filter clear resets URL state without scrolling",
   );
   expectMatch(
     taskPage,
-    /href=\{hasActiveFilters \? tasksPath : "#create-task"\}\s+scroll=\{!hasActiveFilters\}/,
-    "task empty state preserves scroll only when clearing filters",
+    /id="create-task"[\s\S]*?<summary/,
+    "task form is collapsed behind a clear add action",
+  );
+  expectMatch(
+    taskPage,
+    /TaskBoardResults[\s\S]*?TaskListResults/,
+    "task view supports both list and board presentations",
   );
 });
 
-test("material search and clear navigation preserve scroll position", () => {
+test("material filters include uploader and keep the upload form compact", () => {
   expectMatch(materialPage, /import Form from "next\/form";/, "use Next Form");
   expectMatch(
     materialPage,
@@ -43,12 +48,17 @@ test("material search and clear navigation preserve scroll position", () => {
   );
   expectMatch(
     materialPage,
-    /<ButtonLink\s+href=\{materialsPath\}\s+scroll=\{false\}\s+variant="secondary">\s*条件をクリア/,
-    "material filter clear preserves scroll position",
+    /<ButtonLink\s+href=\{clearHref\}\s+scroll=\{false\}\s+variant="secondary">\s*クリア/,
+    "material filter clear resets URL state without scrolling",
   );
   expectMatch(
     materialPage,
-    /href=\{\s*hasActiveFilters\s*\?\s*materialsPath\s*:\s*"#material-upload"\s*\}\s*scroll=\{!hasActiveFilters\}/,
-    "material empty state preserves scroll only when clearing filters",
+    /name="uploader"/,
+    "material uploader can be used as a filter",
+  );
+  expectMatch(
+    materialPage,
+    /id="material-upload"[\s\S]*?<summary/,
+    "material upload form is collapsed behind a clear add action",
   );
 });

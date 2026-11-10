@@ -45,7 +45,7 @@ export default async function ProfileSetupPage() {
 
   return (
     <main
-      className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10 sm:py-16"
+      className="app-shell flex min-h-screen items-center justify-center px-4 py-10 sm:py-16"
       id="main-content"
       tabIndex={-1}
     >
@@ -53,7 +53,7 @@ export default async function ProfileSetupPage() {
         <PageHeader
           eyebrow="アカウント設定"
           title="プロフィール設定"
-          description="Lab機能を利用する前に、教員・学生の区分を登録してください。学生は学生番号が必要です。"
+          description="区分を登録してください。学生は学生番号が必要です。保存後、Labを作成するか、Ownerから招待されたLabに参加できます。"
         />
         <ProfileForm
           name={profile?.name ?? ""}

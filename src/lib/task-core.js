@@ -1,7 +1,7 @@
 import { LIST_PAGE_SIZE } from "./list-query.js";
 
 /**
- * @typedef {"ASSIGNEE_NOT_MEMBER" | "TASK_NOT_FOUND"} TaskOperationErrorCode
+ * @typedef {"ASSIGNEE_NOT_MEMBER" | "INVALID_STATUS" | "TASK_NOT_FOUND"} TaskOperationErrorCode
  * @typedef {{
  *   title: string,
  *   description: string | null,
@@ -48,8 +48,11 @@ import { LIST_PAGE_SIZE } from "./list-query.js";
 
 const errorMessages = {
   ASSIGNEE_NOT_MEMBER: "The selected assignee is not a member of this Lab.",
+  INVALID_STATUS: "The requested Task status is invalid.",
   TASK_NOT_FOUND: "Task not found in this Lab.",
 };
+
+const taskStatuses = new Set(["TODO", "IN_PROGRESS", "DONE"]);
 
 export class TaskOperationError extends Error {
   /** @param {TaskOperationErrorCode} code */
@@ -65,12 +68,18 @@ export class TaskOperationError extends Error {
  * been checked by `requireLabMember`.
  *
  * @param {import("../generated/prisma/client").PrismaClient} db
- * @param {{labId: string, query?: string, status?: "TODO" | "IN_PROGRESS" | "DONE", assigneeId?: string | null, page?: number}} input
+ * @param {{labId: string, query?: string, status?: "TODO" | "IN_PROGRESS" | "DONE", assigneeId?: string | null, page?: number, sort?: "recent" | "due", overdueBefore?: Date}} input
  */
 export async function listTasksForLab(db, input) {
   const where = { labId: input.labId };
   if (input.status) {
     where.status = input.status;
+  }
+  if (input.overdueBefore) {
+    where.AND = [
+      { status: { not: "DONE" } },
+      { dueAt: { lt: input.overdueBefore } },
+    ];
   }
   if (input.assigneeId !== undefined) {
     where.assigneeId = input.assigneeId;
@@ -87,7 +96,14 @@ export async function listTasksForLab(db, input) {
   const page = Math.max(1, Math.min(input.page ?? 1, pageCount));
   const items = await db.task.findMany({
     where,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    orderBy:
+      input.sort === "due"
+        ? [
+            { dueAt: { sort: "asc", nulls: "last" } },
+            { createdAt: "desc" },
+            { id: "desc" },
+          ]
+        : [{ createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * LIST_PAGE_SIZE,
     take: LIST_PAGE_SIZE,
     select: {
@@ -156,6 +172,30 @@ export function updateTask(db, labId, taskId, data) {
 
     return { id: taskId };
   });
+}
+
+/**
+ * Update only the status on a Task in the requested Lab.
+ * @param {import("../generated/prisma/client").PrismaClient} db
+ * @param {string} labId
+ * @param {string} taskId
+ * @param {unknown} status
+ */
+export async function updateTaskStatus(db, labId, taskId, status) {
+  if (!taskStatuses.has(status)) {
+    throw new TaskOperationError("INVALID_STATUS");
+  }
+
+  const result = await db.task.updateMany({
+    where: { id: taskId, labId },
+    data: { status },
+  });
+
+  if (result.count === 0) {
+    throw new TaskOperationError("TASK_NOT_FOUND");
+  }
+
+  return { id: taskId, status };
 }
 
 /**

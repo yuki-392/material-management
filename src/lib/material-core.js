@@ -52,12 +52,15 @@ export class MaterialOperationError extends Error {
 /**
  * Read a filtered page of this Lab's Material rows, newest first.
  * @param {PrismaClient} db
- * @param {{labId: string, query?: string, type?: keyof typeof materialTypeContentTypes, page?: number}} input
+ * @param {{labId: string, query?: string, type?: keyof typeof materialTypeContentTypes, uploaderId?: string, page?: number}} input
  */
 export async function listLabMaterials(db, input) {
   const where = { labId: input.labId };
   if (input.type) {
     where.contentType = { in: materialTypeContentTypes[input.type] };
+  }
+  if (input.uploaderId) {
+    where.uploaderId = input.uploaderId;
   }
   if (input.query) {
     where.OR = [

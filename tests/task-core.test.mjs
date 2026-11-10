@@ -6,6 +6,7 @@ import {
   createTask,
   deleteTask,
   listTasksForLab,
+  updateTaskStatus,
   updateTask,
 } from "../src/lib/task-core.js";
 
@@ -69,6 +70,17 @@ function createFakeDatabase({ memberships = [], tasks = [] } = {}) {
       async findMany(args) {
         calls.push(["task.findMany", args]);
         return state.tasks.filter((task) => task.labId === args.where.labId);
+      },
+      async updateMany(args) {
+        calls.push(["task.updateMany", args]);
+        const task = state.tasks.find(
+          (candidate) =>
+            candidate.id === args.where.id &&
+            candidate.labId === args.where.labId,
+        );
+        if (!task) return { count: 0 };
+        Object.assign(task, args.data);
+        return { count: 1 };
       },
       async deleteMany(args) {
         calls.push(["task.deleteMany", args]);
@@ -179,6 +191,103 @@ test("filters unassigned tasks and clamps a stale page to the last page", async 
   assert.equal(result.page, 2);
   assert.equal(result.pageCount, 2);
   assert.equal(findManyArgs.skip, 20);
+});
+
+test("orders tasks by deadline and can limit results to overdue open tasks", async () => {
+  let countArgs;
+  let findManyArgs;
+  const db = {
+    task: {
+      count: async (args) => {
+        countArgs = args;
+        return 1;
+      },
+      findMany: async (args) => {
+        findManyArgs = args;
+        return [];
+      },
+    },
+  };
+  const overdueBefore = new Date("2026-11-06T12:00:00.000Z");
+
+  await listTasksForLab(db, {
+    labId: "lab-1",
+    sort: "due",
+    overdueBefore,
+  });
+
+  assert.deepEqual(countArgs.where, {
+    labId: "lab-1",
+    AND: [
+      { status: { not: "DONE" } },
+      { dueAt: { lt: overdueBefore } },
+    ],
+  });
+  assert.deepEqual(findManyArgs.orderBy, [
+    { dueAt: { sort: "asc", nulls: "last" } },
+    { createdAt: "desc" },
+    { id: "desc" },
+  ]);
+});
+
+test("updates only a Task status when both its id and Lab match", async () => {
+  const task = {
+    id: "task-1",
+    labId: "lab-1",
+    ...taskInput,
+    title: "Keep task details",
+    description: "Keep this description",
+    assigneeId: "member-1",
+  };
+  const { db, state, calls } = createFakeDatabase({ tasks: [task] });
+
+  await updateTaskStatus(db, "lab-1", "task-1", "DONE");
+
+  assert.equal(state.tasks[0].status, "DONE");
+  assert.equal(state.tasks[0].title, "Keep task details");
+  assert.equal(state.tasks[0].description, "Keep this description");
+  assert.equal(state.tasks[0].assigneeId, "member-1");
+  assert.ok(
+    calls.some(
+      ([name, args]) =>
+        name === "task.updateMany" &&
+        args.where.id === "task-1" &&
+        args.where.labId === "lab-1" &&
+        args.data.status === "DONE" &&
+        Object.keys(args.data).length === 1,
+    ),
+  );
+});
+
+test("rejects invalid Task statuses before writing", async () => {
+  const task = { id: "task-1", labId: "lab-1", ...taskInput };
+  const { db, state, calls } = createFakeDatabase({ tasks: [task] });
+
+  await assert.rejects(
+    updateTaskStatus(db, "lab-1", "task-1", "ARCHIVED"),
+    expectTaskError("INVALID_STATUS"),
+  );
+  assert.equal(state.tasks[0].status, "TODO");
+  assert.equal(calls.some(([name]) => name === "task.updateMany"), false);
+});
+
+test("does not update a Task outside the requested Lab", async () => {
+  const task = { id: "task-1", labId: "lab-2", ...taskInput };
+  const { db, state, calls } = createFakeDatabase({ tasks: [task] });
+
+  await assert.rejects(
+    updateTaskStatus(db, "lab-1", "task-1", "DONE"),
+    expectTaskError("TASK_NOT_FOUND"),
+  );
+  assert.equal(state.tasks[0].status, "TODO");
+  assert.ok(
+    calls.some(
+      ([name, args]) =>
+        name === "task.updateMany" &&
+        args.where.id === "task-1" &&
+        args.where.labId === "lab-1",
+    ),
+  );
 });
 
 test("creates a Task with no assignee", async () => {

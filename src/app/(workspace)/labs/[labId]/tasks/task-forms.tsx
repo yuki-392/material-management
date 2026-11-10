@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, type FormEvent } from "react";
+import { startTransition, useActionState, useOptimistic, type FormEvent } from "react";
 
 import type { TaskStatusValue } from "@/lib/task-validation.js";
+import { parseTaskStatus } from "@/lib/list-query.js";
 import {
   initialTaskFormState,
   type TaskFormState,
@@ -12,6 +13,7 @@ import {
   createTaskAction,
   deleteTaskAction,
   updateTaskAction,
+  updateTaskStatusAction,
 } from "./actions";
 import {
   Button,
@@ -19,6 +21,7 @@ import {
   FormError,
   inputClassName,
   selectClassName,
+  TaskStatusBadge,
   textareaClassName,
 } from "@/components/ui";
 
@@ -55,7 +58,7 @@ export function CreateTaskForm({
       <TaskFields members={members} state={state} />
       {state.formError ? <FormError message={state.formError} /> : null}
       <Button disabled={isPending} type="submit">
-        {isPending ? "作成中…" : "Taskを作成"}
+        {isPending ? "作成中…" : "タスクを追加"}
       </Button>
     </form>
   );
@@ -88,6 +91,110 @@ export function EditTaskForm({
   );
 }
 
+export function TaskStatusControl({
+  labId,
+  taskId,
+  status,
+}: {
+  labId: string;
+  taskId: string;
+  status: TaskStatusValue;
+}) {
+  const [state, dispatch, isPending] = useActionState(
+    updateTaskStatusAction,
+    { status },
+  );
+  const confirmedStatus = state.status ?? status;
+  const [visibleStatus, setOptimisticStatus] = useOptimistic(confirmedStatus);
+  const statusMessage = isPending
+    ? "状態を更新中…"
+    : state.formError || state.success || "選択すると自動で反映されます。";
+  const statusMessageClass = state.formError && !isPending
+    ? "text-rose-700"
+    : state.success
+      ? "text-emerald-700"
+      : "text-slate-500";
+
+  function updateStatus(nextStatus: TaskStatusValue) {
+    const formData = new FormData();
+    formData.set("labId", labId);
+    formData.set("taskId", taskId);
+    formData.set("status", nextStatus);
+
+    startTransition(() => {
+      setOptimisticStatus(nextStatus);
+      dispatch(formData);
+    });
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-2 sm:items-end">
+      <div className="flex flex-wrap items-center gap-2">
+        <TaskStatusBadge status={visibleStatus} />
+        <TaskStatusSelect
+          taskId={taskId}
+          status={visibleStatus}
+          disabled={isPending}
+          onChange={updateStatus}
+        />
+        {visibleStatus !== "DONE" ? (
+          <Button
+            disabled={isPending}
+            onClick={() => updateStatus("DONE")}
+            type="button"
+          >
+            完了にする
+          </Button>
+        ) : null}
+      </div>
+      <p
+        aria-live="polite"
+        className={`min-h-5 text-xs ${statusMessageClass}`}
+        role={state.formError && !isPending ? "alert" : "status"}
+      >
+        {statusMessage}
+      </p>
+    </div>
+  );
+}
+
+function TaskStatusSelect({
+  taskId,
+  status,
+  disabled,
+  onChange,
+}: {
+  taskId: string;
+  status: TaskStatusValue;
+  disabled: boolean;
+  onChange: (status: TaskStatusValue) => void;
+}) {
+  return (
+    <>
+      <label className="sr-only" htmlFor={`task-status-${taskId}`}>
+        タスクの状態
+      </label>
+      <select
+        className={statusControlClassName(status)}
+        disabled={disabled}
+        id={`task-status-${taskId}`}
+        name="status"
+        onChange={(event) => {
+          const nextStatus = parseTaskStatus(event.currentTarget.value);
+          if (nextStatus) {
+            onChange(nextStatus);
+          }
+        }}
+        value={status}
+      >
+        <option value="TODO">未着手</option>
+        <option value="IN_PROGRESS">進行中</option>
+        <option value="DONE">完了</option>
+      </select>
+    </>
+  );
+}
+
 export function DeleteTaskForm({
   labId,
   taskId,
@@ -113,7 +220,7 @@ export function DeleteTaskForm({
       <input name="labId" type="hidden" value={labId} />
       <input name="taskId" type="hidden" value={taskId} />
       <Button disabled={isPending} type="submit" variant="danger">
-        {isPending ? "削除中…" : "Taskを削除"}
+        {isPending ? "削除中…" : "タスクを削除"}
       </Button>
       {state.formError ? <FormError message={state.formError} /> : null}
     </form>
@@ -193,7 +300,7 @@ function TaskFields({
             name="status"
             required
           >
-            <option value="TODO">TODO</option>
+            <option value="TODO">未着手</option>
             <option value="IN_PROGRESS">進行中</option>
             <option value="DONE">完了</option>
           </select>
@@ -204,7 +311,7 @@ function TaskFields({
         </div>
       ) : (
         <p className="text-xs text-slate-500">
-          新しいTaskはTODOとして作成されます。
+          新しいタスクは「未着手」として作成されます。
         </p>
       )}
 
@@ -268,4 +375,14 @@ function errorId(
   state: TaskFormState,
 ) {
   return state.fieldErrors?.[field] ? `${prefix}-${field}-error` : undefined;
+}
+
+function statusControlClassName(status: TaskStatusValue) {
+  const statusStyles = {
+    TODO: "border-slate-300 bg-slate-100 text-slate-700",
+    IN_PROGRESS: "border-indigo-200 bg-indigo-50 text-indigo-900",
+    DONE: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  } as const;
+
+  return `min-h-10 rounded-xl border px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${statusStyles[status]}`;
 }

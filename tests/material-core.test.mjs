@@ -66,11 +66,13 @@ test("searches, filters, and paginates only a Lab's materials", async () => {
     labId: "lab-1",
     query: "paper",
     type: "image",
+    uploaderId: "user-1",
     page: 1,
   });
   const expectedWhere = {
     labId: "lab-1",
     contentType: { in: ["image/jpeg", "image/png"] },
+    uploaderId: "user-1",
     OR: [
       { title: { contains: "paper", mode: "insensitive" } },
       { description: { contains: "paper", mode: "insensitive" } },

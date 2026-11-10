@@ -8,7 +8,7 @@ import {
 import { getMissingAuthEnvironmentVariables } from "@/lib/auth-environment.js";
 import { prisma } from "@/lib/db";
 import { getLabCreationCapacity } from "@/lib/storage-quota-core.js";
-import { ButtonLink, Card, EmptyState, PageHeader } from "@/components/ui";
+import { ButtonLink, Card, EmptyState, PageHeader, TaskStatusBadge } from "@/components/ui";
 import { AddMemberForm, RemoveMemberForm } from "./member-management";
 
 export default async function LabsPage() {
@@ -104,48 +104,110 @@ export default async function LabsPage() {
     },
   });
   const isOwner = lab.ownerId === labAccess.userId;
+  const now = new Date();
+  const [myTasks, upcomingTasks, recentMaterials] = await Promise.all([
+    prisma.task.findMany({
+      where: { labId: labAccess.labId, assigneeId: labAccess.userId, status: { not: "DONE" } },
+      orderBy: [{ dueAt: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
+      take: 5,
+      select: { id: true, title: true, status: true, dueAt: true },
+    }),
+    prisma.task.findMany({
+      where: { labId: labAccess.labId, status: { not: "DONE" }, dueAt: { not: null } },
+      orderBy: [{ dueAt: "asc" }, { id: "asc" }],
+      take: 5,
+      select: { id: true, title: true, status: true, dueAt: true, assignee: { select: { name: true, email: true } } },
+    }),
+    prisma.material.findMany({
+      where: { labId: labAccess.labId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 4,
+      select: { id: true, title: true, description: true, contentType: true, createdAt: true, uploader: { select: { name: true, email: true } } },
+    }),
+  ]);
+  const tasksHref = `/labs/${encodeURIComponent(lab.id)}/tasks`;
+  const materialsHref = `/labs/${encodeURIComponent(lab.id)}/materials`;
 
   return (
     <div className="space-y-7 sm:space-y-8">
       <PageHeader
         eyebrow="ワークスペース"
         title={lab.name}
-        description={`${isOwner ? "Owner兼メンバー" : "メンバー"} · 作成日 ${new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium", timeZone: "Asia/Tokyo" }).format(lab.createdAt)}`}
+        description={`${isOwner ? "Owner兼メンバー" : "メンバー"} · タスク、締切、最近の資料を確認できます`}
       />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="flex flex-col">
-          <div>
-            <p className="text-sm font-semibold text-indigo-700">タスク管理</p>
-            <h2 className="mt-1 text-xl font-bold text-slate-950">Task</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              担当者・締切・進捗をLabのメンバーと共有します。
-            </p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card aria-labelledby="my-tasks-heading" className="p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-indigo-700">自分が担当</p>
+              <h2 className="mt-1 text-lg font-bold text-slate-950" id="my-tasks-heading">未完了のタスク</h2>
+            </div>
+            <ButtonLink className="min-h-9 px-3 text-xs" href={`${tasksHref}?assignee=me`} variant="secondary">一覧を見る</ButtonLink>
           </div>
-          <ButtonLink
-            className="mt-5 self-start"
-            href={`/labs/${encodeURIComponent(lab.id)}/tasks`}
-            variant="secondary"
-          >
-            Taskを開く
-          </ButtonLink>
+          {myTasks.length ? (
+            <ul className="mt-3 divide-y divide-slate-100">
+              {myTasks.map((task) => (
+                <li className="flex min-w-0 items-start justify-between gap-3 py-3" key={task.id}>
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-semibold text-slate-900">{task.title}</p>
+                    <p className={`mt-1 text-xs ${task.dueAt && task.dueAt < now ? "font-semibold text-rose-700" : "text-slate-500"}`}>{task.dueAt ? `締切 ${formatTokyoDate(task.dueAt)}${task.dueAt < now ? " · 期限超過" : ""}` : "締切未設定"}</p>
+                  </div>
+                  <TaskStatusBadge status={task.status} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-3"><EmptyState title="担当中の未完了タスクはありません" description="担当が割り当てられると、ここから締切と進捗を確認できます。" action={<ButtonLink href={tasksHref} variant="secondary">タスクを見る</ButtonLink>} /></div>
+          )}
         </Card>
 
-        <Card className="flex flex-col">
-          <div>
-            <p className="text-sm font-semibold text-indigo-700">資料管理</p>
-            <h2 className="mt-1 text-xl font-bold text-slate-950">資料</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              研究に使うPDFやOfficeファイルをLab内で共有します。
-            </p>
+        <Card aria-labelledby="upcoming-tasks-heading" className="p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-amber-700">Lab全体</p>
+              <h2 className="mt-1 text-lg font-bold text-slate-950" id="upcoming-tasks-heading">締切が近いタスク</h2>
+            </div>
+            <ButtonLink className="min-h-9 px-3 text-xs" href={`${tasksHref}?sort=due`} variant="secondary">締切順で見る</ButtonLink>
           </div>
-          <ButtonLink
-            className="mt-5 self-start"
-            href={`/labs/${encodeURIComponent(lab.id)}/materials`}
-            variant="secondary"
-          >
-            資料を開く
-          </ButtonLink>
+          {upcomingTasks.length ? (
+            <ul className="mt-3 divide-y divide-slate-100">
+              {upcomingTasks.map((task) => (
+                <li className="flex min-w-0 items-start justify-between gap-3 py-3" key={task.id}>
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-semibold text-slate-900">{task.title}</p>
+                    <p className={`mt-1 text-xs ${task.dueAt && task.dueAt < now ? "font-semibold text-rose-700" : "text-slate-500"}`}>{task.assignee?.name?.trim() || task.assignee?.email || "担当者なし"} · 締切 {task.dueAt ? `${formatTokyoDate(task.dueAt)}${task.dueAt < now ? " · 期限超過" : ""}` : "未設定"}</p>
+                  </div>
+                  <TaskStatusBadge status={task.status} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-3"><EmptyState title="近い締切のタスクはありません" description="新しいタスクを登録したり、一覧で未設定の締切を確認できます。" action={<ButtonLink href={tasksHref} variant="secondary">タスクを見る</ButtonLink>} /></div>
+          )}
+        </Card>
+
+        <Card aria-labelledby="recent-materials-heading" className="p-4 sm:col-span-2 sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-emerald-700">最近追加</p>
+              <h2 className="mt-1 text-lg font-bold text-slate-950" id="recent-materials-heading">資料</h2>
+            </div>
+            <ButtonLink className="min-h-9 px-3 text-xs" href={materialsHref} variant="secondary">資料一覧を見る</ButtonLink>
+          </div>
+          {recentMaterials.length ? (
+            <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+              {recentMaterials.map((material) => (
+                <li className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/70 p-3" key={material.id}>
+                  <p className="break-words text-sm font-semibold text-slate-900">{material.title}</p>
+                  <p className="mt-1 line-clamp-2 break-words text-sm text-slate-600">{material.description || getMaterialTypeLabel(material.contentType)}</p>
+                  <p className="mt-2 text-xs text-slate-500">{material.uploader?.name?.trim() || material.uploader?.email || "登録者不明"} · {formatTokyoDate(material.createdAt)}</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-3"><EmptyState title="最近追加された資料はありません" description="資料を追加すると、投稿者と登録日をここで確認できます。" action={<ButtonLink href={materialsHref} variant="secondary">資料を追加</ButtonLink>} /></div>
+          )}
         </Card>
       </div>
 
@@ -245,4 +307,23 @@ export default async function LabsPage() {
       </Card>
     </div>
   );
+}
+
+function formatTokyoDate(date: Date) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Tokyo",
+  }).format(date);
+}
+
+function getMaterialTypeLabel(contentType: string) {
+  if (contentType === "application/pdf") return "PDF";
+  if (contentType.startsWith("image/")) return "画像ファイル";
+  if (contentType.includes("wordprocessingml")) return "Wordファイル";
+  if (contentType.includes("presentationml")) return "PowerPointファイル";
+  if (contentType.includes("spreadsheetml")) return "Excelファイル";
+  return "資料ファイル";
 }

@@ -1,4 +1,4 @@
-/** @typedef {{label: string, href: string, match: "exact" | "section"}} WorkspaceNavigationItem */
+/** @typedef {{label: string, href: string, match: "exact" | "section" | "anchor"}} WorkspaceNavigationItem */
 
 /**
  * @param {string | null} labId
@@ -6,13 +6,13 @@
  * @returns {WorkspaceNavigationItem[]}
  */
 export function getWorkspaceNavigationItems(labId, isAppAdmin = false) {
-  const items = [{ label: "Lab", href: "/labs", match: "exact" }];
+  const items = [{ label: "ホーム", href: "/labs", match: "exact" }];
 
   if (labId) {
     const encodedLabId = encodeURIComponent(labId);
     items.push(
       {
-        label: "Task",
+        label: "タスク",
         href: `/labs/${encodedLabId}/tasks`,
         match: "section",
       },
@@ -20,6 +20,11 @@ export function getWorkspaceNavigationItems(labId, isAppAdmin = false) {
         label: "資料",
         href: `/labs/${encodedLabId}/materials`,
         match: "section",
+      },
+      {
+        label: "メンバー",
+        href: "/labs#lab-members-heading",
+        match: "anchor",
       },
     );
   }
@@ -42,6 +47,10 @@ export function getWorkspaceNavigationItems(labId, isAppAdmin = false) {
 export function isWorkspaceNavigationItemActive(pathname, item) {
   if (item.match === "exact") {
     return pathname === item.href;
+  }
+
+  if (item.match === "anchor") {
+    return false;
   }
 
   return pathname === item.href || pathname.startsWith(`${item.href}/`);

@@ -64,7 +64,10 @@ export default async function WorkspaceLayout({
     .toUpperCase();
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="app-shell min-h-screen">
+      <a className="sr-only z-50 rounded-lg bg-indigo-700 px-4 py-3 font-semibold text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-900" href="#main-content">
+        本文へ移動
+      </a>
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
@@ -125,7 +128,7 @@ export default async function WorkspaceLayout({
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-3">
             <WorkspaceNavigation
               isAppAdmin={isAppAdminEmail(
                 session.user.email,

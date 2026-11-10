@@ -8,15 +8,15 @@ import {
 
 test("shows only the Lab link when the user has no Lab", () => {
   assert.deepEqual(getWorkspaceNavigationItems(null), [
-    { label: "Lab", href: "/labs", match: "exact" },
+    { label: "ホーム", href: "/labs", match: "exact" },
   ]);
 });
 
-test("shows Lab, Task, and Material links scoped to the current Lab", () => {
+test("shows home, Lab tools, and member navigation", () => {
   assert.deepEqual(getWorkspaceNavigationItems("lab-123"), [
-    { label: "Lab", href: "/labs", match: "exact" },
+    { label: "ホーム", href: "/labs", match: "exact" },
     {
-      label: "Task",
+      label: "タスク",
       href: "/labs/lab-123/tasks",
       match: "section",
     },
@@ -25,6 +25,7 @@ test("shows Lab, Task, and Material links scoped to the current Lab", () => {
       href: "/labs/lab-123/materials",
       match: "section",
     },
+    { label: "メンバー", href: "/labs#lab-members-heading", match: "anchor" },
   ]);
 });
 
@@ -33,6 +34,7 @@ test("encodes the Lab id before building navigation links", () => {
 
   assert.equal(items[1].href, "/labs/lab%2F123/tasks");
   assert.equal(items[2].href, "/labs/lab%2F123/materials");
+  assert.equal(items[3].href, "/labs#lab-members-heading");
 });
 
 test("shows the storage administration link only for app administrators", () => {
@@ -50,7 +52,7 @@ test("shows the storage administration link only for app administrators", () => 
 });
 
 test("marks an exact page or a nested page in the matching section active", () => {
-  const [lab, task, materials] = getWorkspaceNavigationItems("lab-123");
+  const [lab, task, materials, members] = getWorkspaceNavigationItems("lab-123");
 
   assert.equal(isWorkspaceNavigationItemActive("/labs", lab), true);
   assert.equal(isWorkspaceNavigationItemActive("/labs/new", lab), false);
@@ -73,4 +75,5 @@ test("marks an exact page or a nested page in the matching section active", () =
     isWorkspaceNavigationItemActive("/labs/lab-123/materials-old", materials),
     false,
   );
+  assert.equal(isWorkspaceNavigationItemActive("/labs", members), false);
 });
