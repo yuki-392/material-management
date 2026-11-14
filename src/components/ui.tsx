@@ -189,3 +189,6 @@ export function TaskStatusBadge({
 function joinClassNames(...classNames: Array<string | undefined>) {
   return classNames.filter(Boolean).join(" ");
 }
+
+export const itemLinkClassName =
+  "block min-w-0 min-h-11 border-l-4 border-transparent px-3 py-3 text-slate-900 hover:bg-slate-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-700 aria-[current=true]:border-indigo-800 aria-[current=true]:bg-indigo-50";

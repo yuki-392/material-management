@@ -8,6 +8,7 @@ export type TaskFieldName =
   | "dueAt";
 
 export type TaskFormState = {
+  success?: boolean;
   fieldErrors?: Partial<Record<TaskFieldName, string>>;
   formError?: string;
 };

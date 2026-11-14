@@ -1,7 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { refresh, revalidatePath } from "next/cache";
 
 import {
   AuthorizationError,
@@ -109,7 +108,8 @@ export async function uploadMaterialAction(
 
   const path = getMaterialsPath(access.labId);
   revalidatePath(path);
-  redirect(path);
+  refresh();
+  return { success: true };
 }
 
 export async function deleteMaterialAction(
@@ -152,7 +152,8 @@ export async function deleteMaterialAction(
 
   const path = getMaterialsPath(access.labId);
   revalidatePath(path);
-  redirect(path);
+  refresh();
+  return { success: true };
 }
 
 async function getLabMemberAccess(labId: string) {

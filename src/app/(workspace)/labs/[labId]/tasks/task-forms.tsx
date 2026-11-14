@@ -1,5 +1,6 @@
 "use client";
 
+import { useCloseAddDialogOnSuccess } from "@/components/add-dialog";
 import { startTransition, useActionState, useOptimistic, type FormEvent } from "react";
 
 import type { TaskStatusValue } from "@/lib/task-validation.js";
@@ -51,6 +52,7 @@ export function CreateTaskForm({
     TaskFormState,
     FormData
   >(createTaskAction, initialTaskFormState);
+  useCloseAddDialogOnSuccess(state.success);
 
   return (
     <form action={formAction} className="mt-5 space-y-4" noValidate>
@@ -87,6 +89,7 @@ export function EditTaskForm({
       <Button disabled={isPending} type="submit">
         {isPending ? "保存中…" : "変更を保存"}
       </Button>
+      {state.success ? <p className="text-sm text-emerald-800" role="status">変更を保存しました。</p> : null}
     </form>
   );
 }
@@ -384,5 +387,5 @@ function statusControlClassName(status: TaskStatusValue) {
     DONE: "border-emerald-200 bg-emerald-50 text-emerald-900",
   } as const;
 
-  return `min-h-10 rounded-xl border px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${statusStyles[status]}`;
+  return `min-h-11 rounded-xl border px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${statusStyles[status]}`;
 }

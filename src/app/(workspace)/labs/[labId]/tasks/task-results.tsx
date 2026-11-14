@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { buildListPageHref } from "@/lib/list-query.js";
 import { getTaskDeadlineHint } from "@/lib/task-presentation.js";
 import { formatTokyoDateTimeLocal } from "@/lib/task-validation.js";
-import { Button, ButtonLink, EmptyState } from "@/components/ui";
+import { Button, ButtonLink, EmptyState, itemLinkClassName, TaskStatusBadge } from "@/components/ui";
 
 import {
   DeleteTaskForm,
@@ -30,15 +31,15 @@ const columns = [
 ] as const;
 
 export function TaskListResults({
-  labId,
   tasks,
-  members,
   filters,
+  selection,
+  itemHref,
 }: {
-  labId: string;
   tasks: TaskList;
-  members: TaskFormMember[];
   filters: TaskFilters;
+  selection: string | null;
+  itemHref: (id: string) => string;
 }) {
   if (!tasks.items.length) {
     return (
@@ -52,11 +53,48 @@ export function TaskListResults({
   return (
     <ul className="divide-y divide-slate-100">
       {tasks.items.map((task) => (
-        <li className="py-4 first:pt-0 last:pb-0 sm:py-5" key={task.id}>
-          <TaskRow labId={labId} task={task} members={members} />
+        <li key={task.id}>
+          <Link aria-current={task.id === selection ? "true" : undefined} className={itemLinkClassName} data-list-item={task.id} href={itemHref(task.id)} prefetch={false} scroll={false}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <span className="font-semibold [overflow-wrap:anywhere]">{task.title}</span>
+              <TaskStatusBadge status={task.status} />
+            </div>
+            <p className="mt-1 text-sm text-slate-600 [overflow-wrap:anywhere]">担当 {task.assignee?.name?.trim() || task.assignee?.email || "未設定"}</p>
+            <TaskDeadline task={task} />
+          </Link>
         </li>
       ))}
     </ul>
+  );
+}
+
+function TaskDeadline({ task }: { task: TaskItem }) {
+  const hint = getTaskDeadlineHint(task.dueAt, task.status, new Date());
+  return (
+    <p className={`text-sm tabular-nums ${hint === "期限超過" ? "font-semibold text-rose-700" : hint === "今日まで" ? "font-semibold text-amber-800" : "text-slate-600"}`}>
+      締切 {task.dueAt ? formatDate(task.dueAt) : "未設定"}{hint ? ` · ${hint}` : ""}
+    </p>
+  );
+}
+
+export function TaskDetail({ labId, task, members }: { labId: string; task: TaskItem; members: TaskFormMember[] }) {
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold text-slate-950 [overflow-wrap:anywhere]" data-detail-heading tabIndex={-1}>{task.title}</h2>
+      <div>
+        <p className="text-sm text-slate-600 [overflow-wrap:anywhere]">担当 {task.assignee?.name?.trim() || task.assignee?.email || "未設定"}</p>
+        <TaskDeadline task={task} />
+      </div>
+      <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700 [overflow-wrap:anywhere]">{task.description || "説明はありません"}</p>
+      <TaskStatusControl key={`${task.id}-${task.status}`} labId={labId} taskId={task.id} status={task.status} />
+      <details className="border-t border-slate-200 pt-2">
+        <summary className="min-h-11 cursor-pointer rounded-md py-3 text-sm font-semibold text-indigo-800 focus-visible:outline-2 focus-visible:outline-indigo-700">タスクを編集</summary>
+        <EditTaskForm labId={labId} members={members} task={getEditableTask(task)} />
+      </details>
+      <div className="border-t border-slate-200 pt-4">
+        <DeleteTaskForm labId={labId} taskId={task.id} taskTitle={task.title} />
+      </div>
+    </div>
   );
 }
 
@@ -236,14 +274,6 @@ export function TaskRow({
 }) {
   const dueHint = getTaskDeadlineHint(task.dueAt, task.status, new Date());
   const assignee = task.assignee?.name?.trim() || task.assignee?.email || "未設定";
-  const editableTask: EditableTask = {
-    id: task.id,
-    title: task.title,
-    description: task.description,
-    status: task.status,
-    assigneeId: task.assigneeId,
-    dueAtLocal: formatTokyoDateTimeLocal(task.dueAt),
-  };
 
   return (
     <article className={board ? "min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm" : "grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"}>
@@ -263,7 +293,7 @@ export function TaskRow({
         <TaskStatusControl key={`${task.id}-${task.status}`} labId={labId} taskId={task.id} status={task.status} />
         <details className="w-full rounded-lg border border-slate-200 px-3 py-2">
           <summary className="cursor-pointer text-xs font-semibold text-indigo-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">編集・削除</summary>
-          <EditTaskForm labId={labId} members={members} task={editableTask} />
+          <EditTaskForm labId={labId} members={members} task={getEditableTask(task)} />
           <div className="mt-3 border-t border-slate-200 pt-3">
             <DeleteTaskForm labId={labId} taskId={task.id} taskTitle={task.title} />
           </div>
@@ -271,6 +301,17 @@ export function TaskRow({
       </div>
     </article>
   );
+}
+
+function getEditableTask(task: TaskItem): EditableTask {
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    assigneeId: task.assigneeId,
+    dueAtLocal: formatTokyoDateTimeLocal(task.dueAt),
+  };
 }
 
 function formatDate(date: Date) {

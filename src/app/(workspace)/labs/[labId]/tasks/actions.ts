@@ -55,7 +55,9 @@ export async function createTaskAction(
     return getTaskOperationError(error, "作成");
   }
 
-  refreshTaskList(access.labId);
+  revalidatePath(`/labs/${encodeURIComponent(access.labId)}/tasks`);
+  refresh();
+  return { success: true };
 }
 
 export async function updateTaskAction(
@@ -95,7 +97,9 @@ export async function updateTaskAction(
     return getTaskOperationError(error, "更新");
   }
 
-  refreshTaskList(access.labId);
+  revalidatePath(`/labs/${encodeURIComponent(access.labId)}/tasks`);
+  refresh();
+  return { success: true };
 }
 
 export async function updateTaskStatusAction(
@@ -166,7 +170,9 @@ export async function deleteTaskAction(
     return getTaskOperationError(error, "削除");
   }
 
-  refreshTaskList(access.labId);
+  revalidatePath(`/labs/${encodeURIComponent(access.labId)}/tasks`);
+  refresh();
+  return { success: true };
 }
 
 async function getTaskLabAccess(labId: string) {
@@ -191,12 +197,6 @@ async function getTaskLabAccess(labId: string) {
 
     throw error;
   }
-}
-
-function refreshTaskList(labId: string): never {
-  const path = `/labs/${encodeURIComponent(labId)}/tasks`;
-  revalidatePath(path);
-  redirect(path);
 }
 
 function getTaskOperationError(

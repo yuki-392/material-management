@@ -9,6 +9,7 @@ import {
   parseTaskSort,
   parseTaskView,
   parseListSearch,
+  parseListSelection,
   parseMaterialUploader,
   parseMaterialType,
   parseTaskAssignee,
@@ -85,4 +86,21 @@ test("keeps task view, sort, focus, and board columns in navigation links", () =
     }),
     "/labs/lab-1/tasks?q=paper+notes&assignee=me&view=board&sort=due&todoPage=2&inProgressPage=3&donePage=1",
   );
+});
+
+test("選択IDのあるリンクは一覧条件とページを保持し、一覧へのリンクでは選択を外す", () => {
+  for (const key of ["taskId", "materialId"]) {
+    const path = "/labs/lab-1/items";
+    const filters = { q: "ゼミ", page: 2 };
+    const url = new URL(buildListPageHref(path, { ...filters, [key]: "item-1" }), "https://example.test");
+    assert.equal(url.searchParams.get(key), "item-1");
+    assert.equal(url.searchParams.get("q"), "ゼミ");
+    assert.equal(url.searchParams.get("page"), "2");
+    assert.equal(new URL(buildListPageHref(path, filters), url).searchParams.has(key), false);
+  }
+  assert.equal(parseListSelection(undefined), null);
+  assert.equal(parseListSelection("item-1"), "item-1");
+  for (const invalid of ["", " ", ["a", "b"], "x".repeat(101)]) {
+    assert.equal(parseListSelection(invalid), "");
+  }
 });

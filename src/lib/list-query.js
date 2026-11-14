@@ -107,6 +107,8 @@ export function buildListPageHref(path, filters) {
     "todoPage",
     "inProgressPage",
     "donePage",
+    "taskId",
+    "materialId",
   ]) {
     const value = filters[key];
     if (typeof value === "string" && value) {
@@ -122,4 +124,10 @@ export function buildListPageHref(path, filters) {
 
   const query = params.toString();
   return query ? `${path}?${query}` : path;
+}
+
+/** @param {unknown} value */
+export function parseListSelection(value) {
+  if (value === undefined) return null;
+  return typeof value === "string" && value.length <= 100 ? value.trim() : "";
 }

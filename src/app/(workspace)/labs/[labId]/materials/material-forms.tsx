@@ -1,5 +1,6 @@
 "use client";
 
+import { useCloseAddDialogOnSuccess } from "@/components/add-dialog";
 import { useActionState, type FormEvent } from "react";
 
 import type { MaterialFormState } from "@/lib/material-form-state";
@@ -26,6 +27,7 @@ export function MaterialUploadForm({
     MaterialFormState,
     FormData
   >(uploadMaterialAction, initialMaterialFormState);
+  useCloseAddDialogOnSuccess(state.success);
 
   return (
     <form
