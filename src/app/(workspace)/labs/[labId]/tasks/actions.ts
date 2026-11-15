@@ -9,9 +9,10 @@ import {
 } from "@/lib/authorization";
 import { getMissingAuthEnvironmentVariables } from "@/lib/auth-environment.js";
 import { prisma } from "@/lib/db";
-import type {
-  TaskFormState,
-  TaskStatusFormState,
+import {
+  getTaskFormValues,
+  type TaskFormState,
+  type TaskStatusFormState,
 } from "@/lib/task-form-state";
 import {
   TaskOperationError,
@@ -37,22 +38,17 @@ export async function createTaskAction(
     return { formError: "このLabのタスクを操作できません。ページを再読み込みしてください。" };
   }
 
-  const validation = validateTaskInput({
-    title: formData.get("title"),
-    description: formData.get("description"),
-    status: "TODO",
-    assigneeId: formData.get("assigneeId"),
-    dueAt: formData.get("dueAt"),
-  });
+  const input = readTaskFormInput(formData, "TODO");
+  const validation = validateTaskInput(input);
 
   if (!validation.success) {
-    return { fieldErrors: validation.fieldErrors };
+    return { fieldErrors: validation.fieldErrors, values: getTaskFormValues(input) };
   }
 
   try {
     await createTask(prisma, access.labId, validation.data);
   } catch (error) {
-    return getTaskOperationError(error, "作成");
+    return { ...getTaskOperationError(error, "作成"), values: getTaskFormValues(input) };
   }
 
   revalidatePath(`/labs/${encodeURIComponent(access.labId)}/tasks`);
@@ -79,22 +75,17 @@ export async function updateTaskAction(
     return { formError: "タスクを確認できませんでした。ページを再読み込みしてください。" };
   }
 
-  const validation = validateTaskInput({
-    title: formData.get("title"),
-    description: formData.get("description"),
-    status: formData.get("status"),
-    assigneeId: formData.get("assigneeId"),
-    dueAt: formData.get("dueAt"),
-  });
+  const input = readTaskFormInput(formData, formData.get("status"));
+  const validation = validateTaskInput(input);
 
   if (!validation.success) {
-    return { fieldErrors: validation.fieldErrors };
+    return { fieldErrors: validation.fieldErrors, values: getTaskFormValues(input) };
   }
 
   try {
     await updateTask(prisma, access.labId, taskId, validation.data);
   } catch (error) {
-    return getTaskOperationError(error, "更新");
+    return { ...getTaskOperationError(error, "更新"), values: getTaskFormValues(input) };
   }
 
   revalidatePath(`/labs/${encodeURIComponent(access.labId)}/tasks`);
@@ -197,6 +188,16 @@ async function getTaskLabAccess(labId: string) {
 
     throw error;
   }
+}
+
+function readTaskFormInput(formData: FormData, status: FormDataEntryValue | null) {
+  return {
+    title: formData.get("title"),
+    description: formData.get("description"),
+    status,
+    assigneeId: formData.get("assigneeId"),
+    dueAt: formData.get("dueAt"),
+  };
 }
 
 function getTaskOperationError(

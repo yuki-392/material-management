@@ -1,7 +1,7 @@
 "use client";
 
 import { useCloseAddDialogOnSuccess } from "@/components/add-dialog";
-import { startTransition, useActionState, useOptimistic, type FormEvent } from "react";
+import { startTransition, useActionState, useEffect, useOptimistic, useRef, type FormEvent } from "react";
 
 import type { TaskStatusValue } from "@/lib/task-validation.js";
 import { parseTaskStatus } from "@/lib/list-query.js";
@@ -53,12 +53,13 @@ export function CreateTaskForm({
     FormData
   >(createTaskAction, initialTaskFormState);
   useCloseAddDialogOnSuccess(state.success);
+  const formRef = useTaskFormErrorFocus(state);
 
   return (
-    <form action={formAction} className="mt-5 space-y-4" noValidate>
+    <form action={formAction} className="mt-5 space-y-4" noValidate ref={formRef}>
       <input name="labId" type="hidden" value={labId} />
       <TaskFields members={members} state={state} />
-      {state.formError ? <FormError message={state.formError} /> : null}
+      {state.formError ? <FormError message={state.formError} tabIndex={-1} /> : null}
       <Button disabled={isPending} type="submit">
         {isPending ? "作成中…" : "タスクを追加"}
       </Button>
@@ -79,13 +80,14 @@ export function EditTaskForm({
     TaskFormState,
     FormData
   >(updateTaskAction, initialTaskFormState);
+  const formRef = useTaskFormErrorFocus(state);
 
   return (
-    <form action={formAction} className="mt-4 space-y-4" noValidate>
+    <form action={formAction} className="mt-4 space-y-4" noValidate ref={formRef}>
       <input name="labId" type="hidden" value={labId} />
       <input name="taskId" type="hidden" value={task.id} />
       <TaskFields members={members} state={state} task={task} />
-      {state.formError ? <FormError message={state.formError} /> : null}
+      {state.formError ? <FormError message={state.formError} tabIndex={-1} /> : null}
       <Button disabled={isPending} type="submit">
         {isPending ? "保存中…" : "変更を保存"}
       </Button>
@@ -230,6 +232,26 @@ export function DeleteTaskForm({
   );
 }
 
+function useTaskFormErrorFocus(state: TaskFormState) {
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    const form = formRef.current;
+    if (state.fieldErrors) {
+      const field = form?.querySelector<HTMLElement>('[aria-invalid="true"]');
+      if (field) {
+        field.focus();
+        return;
+      }
+    }
+    if (state.formError) {
+      form?.querySelector<HTMLElement>('[role="alert"]')?.focus();
+    }
+  }, [state]);
+
+  return formRef;
+}
+
 function TaskFields({
   members,
   state,
@@ -240,6 +262,9 @@ function TaskFields({
   task?: EditableTask;
 }) {
   const prefix = task ? `task-${task.id}` : "new-task";
+  // selectは初期値が変わったときに再マウントし、送信後の選択を復元する。
+  const status = state.values?.status ?? task?.status;
+  const assigneeId = state.values?.assigneeId ?? task?.assigneeId ?? "";
 
   return (
     <>
@@ -254,7 +279,7 @@ function TaskFields({
           aria-describedby={errorId(prefix, "title", state)}
           aria-invalid={Boolean(state.fieldErrors?.title)}
           className={inputClassName}
-          defaultValue={task?.title ?? ""}
+          defaultValue={state.values?.title ?? task?.title ?? ""}
           id={`${prefix}-title`}
           maxLength={200}
           name="title"
@@ -274,7 +299,7 @@ function TaskFields({
           aria-describedby={errorId(prefix, "description", state)}
           aria-invalid={Boolean(state.fieldErrors?.description)}
           className={textareaClassName}
-          defaultValue={task?.description ?? ""}
+          defaultValue={state.values?.description ?? task?.description ?? ""}
           id={`${prefix}-description`}
           maxLength={5000}
           name="description"
@@ -298,7 +323,8 @@ function TaskFields({
             aria-describedby={errorId(prefix, "status", state)}
             aria-invalid={Boolean(state.fieldErrors?.status)}
             className={selectClassName}
-            defaultValue={task.status}
+            defaultValue={status}
+            key={status}
             id={`${prefix}-status`}
             name="status"
             required
@@ -329,7 +355,8 @@ function TaskFields({
           aria-describedby={errorId(prefix, "assigneeId", state)}
           aria-invalid={Boolean(state.fieldErrors?.assigneeId)}
           className={selectClassName}
-          defaultValue={task?.assigneeId ?? ""}
+          defaultValue={assigneeId}
+          key={assigneeId}
           id={`${prefix}-assignee`}
           name="assigneeId"
         >
@@ -357,7 +384,7 @@ function TaskFields({
           aria-describedby={errorId(prefix, "dueAt", state)}
           aria-invalid={Boolean(state.fieldErrors?.dueAt)}
           className={inputClassName}
-          defaultValue={task?.dueAtLocal ?? ""}
+          defaultValue={state.values?.dueAt ?? task?.dueAtLocal ?? ""}
           id={`${prefix}-due-at`}
           name="dueAt"
           step={60}

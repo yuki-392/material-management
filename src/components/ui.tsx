@@ -132,11 +132,12 @@ export function EmptyState({
   );
 }
 
-export function FormError({ message }: { message: string }) {
+export function FormError({ message, tabIndex }: { message: string; tabIndex?: number }) {
   return (
     <p
       className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-5 text-rose-900"
       role="alert"
+      tabIndex={tabIndex}
     >
       {message}
     </p>
