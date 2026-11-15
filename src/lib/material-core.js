@@ -51,7 +51,7 @@ export class MaterialOperationError extends Error {
 }
 
 /**
- * Read a filtered page of this Lab's Material rows, newest first.
+ * 対象Labの資料を絞り込み、新しい順に1ページ分取得する。
  * @param {PrismaClient} db
  * @param {{labId: string, query?: string, type?: keyof typeof materialTypeContentTypes, uploaderId?: string, page?: number}} input
  */
@@ -97,8 +97,8 @@ export async function listLabMaterials(db, input) {
 }
 
 /**
- * Store the file before metadata. Delete it after a registration error only
- * once the reservation is closed and no Material references the key.
+ * ファイルを先に保存し、続いて資料情報をDBに登録する。
+ * 登録時にエラーが返った場合は、予約が終了し、資料行がキーを参照していないと確認できた場合だけファイルを削除する。
  * @param {PrismaClient} db
  * @param {{putObject: (input: {key: string, body: Uint8Array, contentType: string, sizeBytes: number}) => Promise<void>, deleteObject: (key: string) => Promise<void>}} storage
  * @param {{labId: string, userId: string, title: string, description: string | null, originalFileName: string, contentType: string, sizeBytes: number, body: Uint8Array}} input
@@ -167,8 +167,8 @@ export async function createMaterial(db, storage, input, quota = {}) {
   } catch (error) {
     logMaterialError("material.upload.metadata-create", error);
 
-    // Release takes the same lock as commit. After it returns, this reservation
-    // cannot be used to register the file after the lookup below.
+    // 予約解放は登録と同じロックを取る。解放処理が終われば、この予約を使った登録が
+    // 後続の検索より後に確定することはない。
     try {
       await release(db, reservationId);
     } catch (releaseError) {
@@ -203,8 +203,7 @@ async function releaseReservationSafely(release, db, reservationId, stage = "mat
 }
 
 /**
- * Resolve a file by both its Material id and Lab id, then read only the object
- * key stored in that matching database row.
+ * 資料IDとLab IDで資料行を検索し、その行に記録されたキーのファイルだけを取得する。
  * @param {PrismaClient} db
  * @param {{getObject: (key: string) => Promise<{body: ReadableStream<Uint8Array> | Uint8Array | null}>}} storage
  * @param {{labId: string, materialId: string}} input
@@ -228,7 +227,7 @@ export async function getMaterialFile(db, storage, { labId, materialId }) {
   const object = await storage.getObject(material.storageKey);
   if (object?.body) return { material, body: object.body };
 
-  // A replacement can remove the old object after the first database read.
+  // 初回のDB検索後に差し替えが完了し、旧ファイルが削除されることがある。
   const current = await findMaterial();
   if (!current) throw new MaterialOperationError("NOT_FOUND");
   if (current.storageKey === material.storageKey) {
@@ -323,7 +322,7 @@ export async function updateMaterial(db, storage, input, quota = {}) {
       await update(db);
     }
   } catch (error) {
-    // A lost commit response can leave the new file live. Verify before cleanup.
+    // 確定の応答を受け取れなくても、新ファイルが使われていることがある。削除前にDBを確認する。
     let committed = false;
     try {
       committed = storageSaved && Boolean(await db.material.findUnique({
@@ -364,8 +363,7 @@ async function deleteUnreferencedObject(storage, key, stage) {
 }
 
 /**
- * Lock the material during removal so a replacement cannot switch its key
- * after deletion has read it but before the database row is removed.
+ * 削除時は資料行をロックし、キーを読み取ってから資料行を削除するまでの間に差し替えが入らないようにする。
  * @param {PrismaClient} db
  * @param {Pick<MaterialWriter, "deleteObject">} storage
  * @param {MaterialAccess} input

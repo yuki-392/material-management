@@ -19,7 +19,7 @@ import {
   updateLabStorageLimit,
 } from "../src/lib/storage-quota-core.js";
 
-test("defines decimal GB limits with an 8GB allocation pool and 1GB reserve", () => {
+test("10進GBで割当枠8GBと予備1GBの容量上限を定義する", () => {
   assert.equal(GLOBAL_STORAGE_LIMIT_BYTES, 9_000_000_000n);
   assert.equal(ALLOCATABLE_STORAGE_LIMIT_BYTES, 8_000_000_000n);
   assert.equal(DEFAULT_LAB_STORAGE_LIMIT_BYTES, 1_000_000_000n);
@@ -27,7 +27,7 @@ test("defines decimal GB limits with an 8GB allocation pool and 1GB reserve", ()
   assert.equal(STORAGE_WARNING_PERCENT, 80);
 });
 
-test("warns at 80 percent and blocks at the Lab storage limit", () => {
+test("Labの割当容量の80％で警告し、上限に達したらアップロードを拒否する", () => {
   assert.deepEqual(getStorageUsageState(799_999_999n, 1_000_000_000n), {
     usedBytes: 799_999_999n,
     limitBytes: 1_000_000_000n,
@@ -47,7 +47,7 @@ test("warns at 80 percent and blocks at the Lab storage limit", () => {
   assert.equal(getStorageUsageState(0n, 0n).warning, false);
 });
 
-test("parses decimal GB quota input exactly down to one byte", () => {
+test("10進GBで入力された割当容量を1バイト単位で正確に読み取る", () => {
   assert.equal(parseStorageLimitGb("1"), 1_000_000_000n);
   assert.equal(parseStorageLimitGb("0.25"), 250_000_000n);
   assert.equal(parseStorageLimitGb("0.001"), 1_000_000n);
@@ -59,7 +59,7 @@ test("parses decimal GB quota input exactly down to one byte", () => {
   assert.equal(parseStorageLimitGb("0.0000000001"), null);
 });
 
-test("normalizes the server-side app admin email allowlist", () => {
+test("サーバー側のアプリ管理者メールアドレス一覧を正規化する", () => {
   assert.deepEqual(
     parseAppAdminEmails(" Admin@Example.com, second@example.com ,,"),
     ["admin@example.com", "second@example.com"],
@@ -70,7 +70,7 @@ test("normalizes the server-side app admin email allowlist", () => {
   assert.equal(isAppAdminEmail(null, "admin@example.com"), false);
 });
 
-test("reports legacy Lab count, allocation overages, and usage warnings", async () => {
+test("既存Labの件数、割当超過、使用量の警告を返す", async () => {
   const now = new Date("2026-10-22T00:00:00.000Z");
   const db = {
     storageQuotaControl: {
@@ -254,7 +254,7 @@ function applyUpdate(target, data) {
   }
 }
 
-test("reserves upload capacity and rejects a concurrent upload past the global cap", async () => {
+test("アップロード容量を予約し、全体の上限を超える同時アップロードを拒否する", async () => {
   const { db, state } = quotaDatabase({
     labLimitBytes: GLOBAL_STORAGE_LIMIT_BYTES,
     materialBytes: Number(GLOBAL_STORAGE_LIMIT_BYTES - 4_000_000n),
@@ -275,7 +275,7 @@ test("reserves upload capacity and rejects a concurrent upload past the global c
   assert.equal(state.control.reservedBytes, 4_000_000n);
 });
 
-test("rejects a reservation that exceeds the individual Lab quota", async () => {
+test("Labの割当容量を超える予約を拒否する", async () => {
   const { db, state } = quotaDatabase({
     labLimitBytes: 1_000_000_000n,
     materialBytes: 999_000_000,
@@ -293,7 +293,7 @@ test("rejects a reservation that exceeds the individual Lab quota", async () => 
   assert.equal(state.control.reservedBytes, 0n);
 });
 
-test("serializes concurrent uploads against one Lab's allocation", async () => {
+test("同じLabの容量を使う同時アップロードを直列化する", async () => {
   const { db, state } = quotaDatabase({
     labLimitBytes: 1_000_000_000n,
     materialBytes: 996_000_000,
@@ -312,7 +312,7 @@ test("serializes concurrent uploads against one Lab's allocation", async () => {
   assert.equal(state.reservations.length, 1);
 });
 
-test("releases expired reservations before calculating available storage", async () => {
+test("空き容量を計算する前に期限切れの予約を解放する", async () => {
   const expiredAt = new Date("2026-10-22T00:00:00.000Z");
   const now = new Date("2026-10-22T00:15:01.000Z");
   const { db, state } = quotaDatabase({
@@ -334,7 +334,7 @@ test("releases expired reservations before calculating available storage", async
   assert.equal(state.control.reservedBytes, 10n);
 });
 
-test("releases a failed upload reservation exactly once", async () => {
+test("失敗したアップロードの容量予約は一度だけ解放する", async () => {
   const { db, state } = quotaDatabase();
   const reservationId = await reserveStorageUpload(db, {
     labId: "lab-1",
@@ -348,7 +348,7 @@ test("releases a failed upload reservation exactly once", async () => {
   assert.equal(state.reservations.length, 0);
 });
 
-test("converts a reservation into material usage in the same transaction", async () => {
+test("容量予約を資料の使用量に同じトランザクションで置き換える", async () => {
   const { db, state } = quotaDatabase();
   const now = new Date("2026-10-22T00:00:00.000Z");
   const reservationId = await reserveStorageUpload(db, {
@@ -368,7 +368,7 @@ test("converts a reservation into material usage in the same transaction", async
   assert.equal(state.materials.length, 1);
 });
 
-test("rejects an expired upload and releases its capacity reservation", async () => {
+test("予約期限を過ぎたアップロードを拒否し、容量予約を解放する", async () => {
   const { db, state } = quotaDatabase();
   const now = new Date("2026-10-22T00:00:00.000Z");
   const reservationId = await reserveStorageUpload(db, {
@@ -391,7 +391,7 @@ test("rejects an expired upload and releases its capacity reservation", async ()
   assert.equal(state.materials.length, 0);
 });
 
-test("rejects a Lab quota change below its stored usage", async () => {
+test("記録済みの使用量を下回るLabの割当変更を拒否する", async () => {
   const { db, state } = quotaDatabase({ materialBytes: 500_000_000 });
 
   await assert.rejects(
@@ -405,7 +405,7 @@ test("rejects a Lab quota change below its stored usage", async () => {
   assert.equal(state.control.allocatedBytes, 1_000_000_000n);
 });
 
-test("allows a Lab allocation to be reduced when usage still fits", async () => {
+test("使用量が新しい割当に収まる場合はLabの割当を減らせる", async () => {
   const { db, state } = quotaDatabase({ materialBytes: 300_000_000 });
 
   const updated = await updateLabStorageLimit(db, {
@@ -417,7 +417,7 @@ test("allows a Lab allocation to be reduced when usage still fits", async () => 
   assert.equal(state.control.allocatedBytes, 500_000_000n);
 });
 
-test("rejects an increase that would exceed the eight-GB allocation pool", async () => {
+test("割当枠の合計が8GBを超える増額を拒否する", async () => {
   const { db, state } = quotaDatabase({
     control: {
       id: "global",

@@ -7,7 +7,7 @@ import {
   validateProfileInput,
 } from "../src/lib/profile-validation.js";
 
-test("student profile trims values and keeps the student number", () => {
+test("学生プロフィールの入力値の前後の空白を除き、学生番号を保持する", () => {
   assert.deepEqual(
     validateProfileInput({
       name: "  Yuki Takahashi  ",
@@ -25,7 +25,7 @@ test("student profile trims values and keeps the student number", () => {
   );
 });
 
-test("teacher profile clears any submitted student number", () => {
+test("教員プロフィールで送信された学生番号は未設定にする", () => {
   assert.deepEqual(
     validateProfileInput({
       name: "Teacher",
@@ -43,7 +43,7 @@ test("teacher profile clears any submitted student number", () => {
   );
 });
 
-test("name is optional but whitespace becomes null", () => {
+test("名前は任意で、空白のみの場合はnullに変換する", () => {
   assert.deepEqual(
     validateProfileInput({ name: "  ", userType: "TEACHER", studentNumber: "" }),
     {
@@ -53,7 +53,7 @@ test("name is optional but whitespace becomes null", () => {
   );
 });
 
-test("unsupported user type is rejected", () => {
+test("未対応のユーザー種別を拒否する", () => {
   const result = validateProfileInput({
     name: "Yuki",
     userType: "ADMIN",
@@ -64,7 +64,7 @@ test("unsupported user type is rejected", () => {
   assert.ok(result.fieldErrors.userType);
 });
 
-test("students must submit a non-empty student number", () => {
+test("学生には空欄でない学生番号が必要", () => {
   for (const studentNumber of ["", "  "]) {
     const result = validateProfileInput({
       name: "Yuki",
@@ -77,7 +77,7 @@ test("students must submit a non-empty student number", () => {
   }
 });
 
-test("unexpected field values and excessive lengths are rejected", () => {
+test("不正な項目値と文字数超過を拒否する", () => {
   const invalidValue = validateProfileInput({
     name: new File(["text"], "name.txt"),
     userType: "TEACHER",

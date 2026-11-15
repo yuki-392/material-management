@@ -46,7 +46,7 @@ function materialRow(overrides = {}) {
   };
 }
 
-test("searches, filters, and paginates only a Lab's materials", async () => {
+test("対象Lab内の資料だけを検索・絞り込み・ページ分割する", async () => {
   const calls = [];
   const expected = [materialRow()];
   const db = {
@@ -97,7 +97,7 @@ test("searches, filters, and paginates only a Lab's materials", async () => {
   assert.equal(calls[1][1].take, 20);
 });
 
-test("returns the first empty page when there are no matching materials", async () => {
+test("一致する資料がない場合は空の1ページ目を返す", async () => {
   let findManyArgs;
   const db = {
     material: {
@@ -120,7 +120,7 @@ test("returns the first empty page when there are no matching materials", async 
   assert.equal(findManyArgs.skip, 0);
 });
 
-test("uploads with a server-created key and the session uploader id", async () => {
+test("サーバーが生成したキーとセッションの投稿者IDを使ってアップロードする", async () => {
   const operations = [];
   let createdData;
   const db = {
@@ -162,7 +162,7 @@ test("uploads with a server-created key and the session uploader id", async () =
   assert.match(createdData.storageKey, /^labs\/lab-1\/materials\//);
 });
 
-test("rejects a quota-limited upload before writing to storage", async () => {
+test("容量上限を超えるアップロードはストレージに書き込む前に拒否する", async () => {
   let storageCalled = false;
   const quota = {
     reserve: async () => {
@@ -199,7 +199,7 @@ test("rejects a quota-limited upload before writing to storage", async () => {
   assert.equal(storageCalled, false);
 });
 
-test("compensates a failed metadata insert by deleting the uploaded object", async () => {
+test("DBに資料を登録できなかった場合は保存済みのファイルを補償削除する", async () => {
   const operations = [];
   const logs = [];
   const originalConsoleError = console.error;
@@ -256,7 +256,7 @@ test("compensates a failed metadata insert by deleting the uploaded object", asy
   ]);
 });
 
-test("tags storage upload failures and skips metadata creation", async () => {
+test("ストレージへの保存に失敗した場合はエラーを分類し、資料をDBに登録しない", async () => {
   const storageFailure = Object.assign(new Error("storage failure"), {
     name: "AccessDenied",
   });
@@ -303,7 +303,7 @@ test("tags storage upload failures and skips metadata creation", async () => {
   ]);
 });
 
-test("logs storage configuration failures separately from object upload failures", async () => {
+test("ストレージ設定の失敗とファイル保存の失敗を区別してログに記録する", async () => {
   const configurationFailure = Object.assign(
     new Error("storage credentials are missing"),
     { code: "MISSING_STORAGE_CONFIGURATION" },
@@ -350,7 +350,7 @@ test("logs storage configuration failures separately from object upload failures
   ]);
 });
 
-test("logs safe context when upload compensation fails", async () => {
+test("補償削除に失敗した場合は安全な情報だけをログに記録する", async () => {
   const operations = [];
   const logs = [];
   const originalConsoleError = console.error;
@@ -423,7 +423,7 @@ test("logs safe context when upload compensation fails", async () => {
   assert.doesNotMatch(JSON.stringify(logs), /private|paper|user-1|lab-1/);
 });
 
-test("looks up a file using both Material id and Lab id, then fetches the DB key", async () => {
+test("資料IDとLab IDで資料を検索し、DBに記録されたキーでファイルを取得する", async () => {
   const queries = [];
   const fetchedKeys = [];
   const expectedBody = new Uint8Array([37, 80, 68, 70]);
@@ -452,7 +452,7 @@ test("looks up a file using both Material id and Lab id, then fetches the DB key
   assert.equal(result.body, expectedBody);
 });
 
-test("does not request storage when the Material is absent from the requested Lab", async () => {
+test("対象Labで資料が見つからない場合はストレージにアクセスしない", async () => {
   let storageCalled = false;
   const db = { material: { findFirst: async () => null } };
   const storage = { getObject: async () => (storageCalled = true) };
@@ -493,7 +493,7 @@ function createFileReads(rows, bodies) {
   return { reads, keys, db, storage };
 }
 
-test("retries a missing old key and responds with the replacement file and its metadata", async () => {
+test("旧キーが見つからない場合は再取得し、差し替え後のファイルと資料情報を返す", async () => {
   const old = materialRow();
   const body = new Uint8Array([1, 2, 3]);
   const replacement = materialRow({
@@ -516,11 +516,11 @@ test("retries a missing old key and responds with the replacement file and its m
 });
 
 for (const scenario of [
-  { label: "the row was deleted", current: null, code: "NOT_FOUND", keys: 1 },
-  { label: "the key is unchanged", current: materialRow(), code: "STORAGE_OBJECT_MISSING", keys: 1 },
-  { label: "the replacement is also missing", current: materialRow({ storageKey: "replacement-key" }), code: "STORAGE_OBJECT_MISSING", keys: 2 },
+  { label: "資料行が削除された", current: null, code: "NOT_FOUND", keys: 1 },
+  { label: "キーが変わっていない", current: materialRow(), code: "STORAGE_OBJECT_MISSING", keys: 1 },
+  { label: "差し替え後のファイルも見つからない", current: materialRow({ storageKey: "replacement-key" }), code: "STORAGE_OBJECT_MISSING", keys: 2 },
 ]) {
-  test(`stops retrieving a missing file when ${scenario.label}`, async () => {
+  test(`${scenario.label}場合はファイル取得を打ち切る`, async () => {
     const { reads, keys, db, storage } = createFileReads([materialRow(), scenario.current], [null, null]);
 
     await assert.rejects(getMaterialFile(db, storage, fileLookup), { code: scenario.code });
@@ -530,7 +530,7 @@ for (const scenario of [
   });
 }
 
-test("a storage failure does not trigger a fresh lookup", async () => {
+test("ストレージ障害では資料を再検索しない", async () => {
   const failure = new Error("storage offline");
   const { reads, keys, db, storage } = createFileReads([materialRow()], [failure]);
 
@@ -539,7 +539,7 @@ test("a storage failure does not trigger a fresh lookup", async () => {
   assert.equal(keys.length, 1);
 });
 
-test("locks the row and deletes the object before removing Lab-scoped metadata", async () => {
+test("資料行をロックし、ファイルを削除してから対象Labの資料行を削除する", async () => {
   const operations = [];
   const tx = {
     async $queryRaw(_strings, ...values) {
@@ -579,7 +579,7 @@ test("locks the row and deletes the object before removing Lab-scoped metadata",
   assert.deepEqual(operations, ["lock"]);
 });
 
-test("uses inline responses for PDF/images and attachment for Office files", () => {
+test("PDFと画像はブラウザーで表示し、Officeファイルは添付として返す", () => {
   const pdf = createMaterialFileResponse(
     materialRow(),
     new Uint8Array([1]),
@@ -600,7 +600,7 @@ test("uses inline responses for PDF/images and attachment for Office files", () 
   assert.match(office.headers.get("content-disposition"), /report\.docx/);
 });
 
-test("sanitizes file names before placing them in HTTP headers", () => {
+test("HTTPヘッダーに入れる前にファイル名から危険な文字を除く", () => {
   const response = createMaterialFileResponse(
     materialRow({ originalFileName: 'bad\r\n"name".pdf' }),
     new Uint8Array([1]),
@@ -609,7 +609,7 @@ test("sanitizes file names before placing them in HTTP headers", () => {
   assert.doesNotMatch(response.headers.get("content-disposition"), /\r|\n/);
 });
 
-test("recovers a committed upload when PostgreSQL's success response is lost", async (t) => {
+test("PostgreSQLの登録成功の応答を受け取れなくても登録済み資料を復旧する", async (t) => {
   t.mock.method(console, "error", () => {});
   const body = new Uint8Array([1, 2, 3]);
   let row;
@@ -656,7 +656,7 @@ test("recovers a committed upload when PostgreSQL's success response is lost", a
   })).body, body);
 });
 
-test("cleans up an expired upload only after checking that no record exists", async (t) => {
+test("予約が期限切れの場合は資料行がないと確認してからファイルを削除する", async (t) => {
   t.mock.method(console, "error", () => {});
   const operations = [];
   let uploadedKey;
@@ -683,8 +683,11 @@ test("cleans up an expired upload only after checking that no record exists", as
   assert.deepEqual(operations, ["release", "check", "delete"]);
 });
 
-for (const failureStage of ["reservation-release", "commit-check"]) {
-  test(`keeps the object if upload recovery fails at ${failureStage}`, async (t) => {
+for (const [failureStage, label] of [
+  ["reservation-release", "予約の解放"],
+  ["commit-check", "登録結果の確認"],
+]) {
+  test(`${label}に失敗した場合はアップロードしたファイルを保持する`, async (t) => {
     const log = t.mock.method(console, "error", () => {});
     const db = { material: { async findUnique() {
       assert.equal(failureStage, "commit-check");

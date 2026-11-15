@@ -102,7 +102,7 @@ function createFakeDatabase({
   return { db, state, calls, control };
 }
 
-test("creates the Lab and owner membership in one transaction", async () => {
+test("LabとOwnerの所属を同じトランザクションで作成する", async () => {
   const { db, state, calls, control } = createFakeDatabase();
 
   const result = await createLabWithOwner(db, "user-1", "Vision Lab");
@@ -132,7 +132,7 @@ test("creates the Lab and owner membership in one transaction", async () => {
   ]);
 });
 
-test("rejects Lab creation after eight lifetime slots have been used", async () => {
+test("Labの累計作成数が8件に達したら新規作成を拒否する", async () => {
   const { db, state, control } = createFakeDatabase({ labCount: 8 });
 
   await assert.rejects(
@@ -144,7 +144,7 @@ test("rejects Lab creation after eight lifetime slots have been used", async () 
   assert.deepEqual(control, { labCount: 8, allocatedBytes: 0n });
 });
 
-test("rejects Lab creation when a full one-GB allocation is unavailable", async () => {
+test("新しいLabに1GBを割り当てられない場合は作成を拒否する", async () => {
   const { db, state, control } = createFakeDatabase({
     labCount: 7,
     allocatedBytes: 7_500_000_001n,
@@ -160,7 +160,7 @@ test("rejects Lab creation when a full one-GB allocation is unavailable", async 
   assert.deepEqual(control, { labCount: 7, allocatedBytes: 7_500_000_001n });
 });
 
-test("serializes concurrent Lab creation at the final count and allocation slot", async () => {
+test("最後の作成枠と容量枠を争うLabの同時作成を直列化する", async () => {
   const { db, state, control } = createFakeDatabase({
     labCount: 7,
     allocatedBytes: 7_000_000_000n,
@@ -181,7 +181,7 @@ test("serializes concurrent Lab creation at the final count and allocation slot"
   assert.deepEqual(control, { labCount: 8, allocatedBytes: 8_000_000_000n });
 });
 
-test("rejects a User who already has a Lab membership", async () => {
+test("既にLabに所属するユーザーによる新規作成を拒否する", async () => {
   const existingMemberships = [{ labId: "lab-existing", userId: "user-1" }];
   const { db, state, calls } = createFakeDatabase({ existingMemberships });
 
@@ -195,7 +195,7 @@ test("rejects a User who already has a Lab membership", async () => {
   assert.equal(calls.some((call) => Array.isArray(call) && call[0] === "lab.create"), false);
 });
 
-test("rolls back the Lab when creating its owner membership fails", async () => {
+test("Ownerの所属作成に失敗した場合はLab作成を取り消す", async () => {
   const { db, state } = createFakeDatabase({ failMembershipCreation: true });
 
   await assert.rejects(
@@ -206,7 +206,7 @@ test("rolls back the Lab when creating its owner membership fails", async () => 
   assert.deepEqual(state.memberships, []);
 });
 
-test("maps a concurrent userId unique conflict to an already-member error", async () => {
+test("同時処理でuserIdの一意制約に違反した場合は所属済みエラーに変換する", async () => {
   const existingMemberships = [{ labId: "lab-from-racing-request", userId: "user-1" }];
   const { db, state } = createFakeDatabase({
     existingMemberships,

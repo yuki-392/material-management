@@ -6,14 +6,14 @@ import {
   validateLabName,
 } from "../src/lib/lab-validation.js";
 
-test("valid Lab names are trimmed before saving", () => {
+test("有効なLab名は前後の空白を除いてから保存する", () => {
   assert.deepEqual(validateLabName("  Vision Lab  "), {
     success: true,
     name: "Vision Lab",
   });
 });
 
-test("empty, non-string, and overly long Lab names are rejected", () => {
+test("空欄、文字列以外、文字数超過のLab名を拒否する", () => {
   assert.equal(validateLabName("   ").success, false);
   assert.equal(validateLabName(new File(["Lab"], "name.txt")).success, false);
   assert.equal(

@@ -1,6 +1,6 @@
 /**
- * Take the membership lock before writing any tasks that depend on it.
- * The lock stays held until the caller's transaction ends.
+ * 所属を前提とするタスクの書き込み前に所属行をロックする。
+ * ロックは呼び出し元のトランザクション終了まで保持する。
  * @param {Pick<import("../generated/prisma/client").Prisma.TransactionClient, "$queryRaw">} tx
  * @param {string} labId
  * @param {string} userId

@@ -34,7 +34,7 @@ export class LabCreationError extends Error {
 }
 
 /**
- * Create a Lab and its owner's membership as one atomic operation.
+ * LabとOwnerの所属を同じトランザクションで作成する。
  *
  * @param {LabCreationDatabase} db
  * @param {string} ownerId

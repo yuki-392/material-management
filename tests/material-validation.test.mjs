@@ -26,7 +26,7 @@ function validInput(overrides = {}) {
   };
 }
 
-test("trims the title and description and strips path components from file names", () => {
+test("タイトルと説明の前後の空白を除き、ファイル名から親パスを取り除く", () => {
   const result = validateMaterialInput(
     validInput({ file: validFile({ name: "C:\\fakepath\\paper.pdf" }) }),
   );
@@ -41,14 +41,14 @@ test("trims the title and description and strips path components from file names
   });
 });
 
-test("converts a whitespace-only optional description to null", () => {
+test("任意の説明が空白のみならnullに変換する", () => {
   const result = validateMaterialInput(validInput({ description: "  " }));
 
   assert.equal(result.success, true);
   assert.equal(result.data.description, null);
 });
 
-test("rejects missing files and files larger than 4 MiB", () => {
+test("ファイルが未選択の場合と4MiBを超える場合は拒否する", () => {
   const missing = validateMaterialInput(validInput({ file: null }));
   const tooLarge = validateMaterialInput(
     validInput({ file: validFile({ size: MAX_MATERIAL_FILE_SIZE + 1 }) }),
@@ -59,7 +59,7 @@ test("rejects missing files and files larger than 4 MiB", () => {
   assert.ok(tooLarge.fieldErrors.file);
 });
 
-test("accepts a file exactly at the 4 MiB limit", () => {
+test("サイズがちょうど4MiBのファイルを受け付ける", () => {
   const result = validateMaterialInput(
     validInput({ file: validFile({ size: MAX_MATERIAL_FILE_SIZE }) }),
   );
@@ -67,7 +67,7 @@ test("accepts a file exactly at the 4 MiB limit", () => {
   assert.equal(result.success, true);
 });
 
-test("rejects unsupported extensions and MIME type/extension mismatches", () => {
+test("未対応の拡張子やMIMEタイプと拡張子が一致しないファイルを拒否する", () => {
   const unsupported = validateMaterialInput(
     validInput({ file: validFile({ name: "program.exe", type: "application/octet-stream" }) }),
   );
@@ -79,7 +79,7 @@ test("rejects unsupported extensions and MIME type/extension mismatches", () => 
   assert.ok(mismatch.fieldErrors.file);
 });
 
-test("rejects an empty or overlong title and an overlong description", () => {
+test("タイトルが空欄または長すぎる場合と説明が長すぎる場合は拒否する", () => {
   const emptyTitle = validateMaterialInput(validInput({ title: "  " }));
   const longTitle = validateMaterialInput(validInput({ title: "x".repeat(201) }));
   const longDescription = validateMaterialInput(
@@ -91,7 +91,7 @@ test("rejects an empty or overlong title and an overlong description", () => {
   assert.ok(longDescription.fieldErrors.description);
 });
 
-test("rejects path-only and overlong file names", () => {
+test("ファイル名を含まないパスや長すぎるファイル名を拒否する", () => {
   const pathOnly = validateMaterialInput(
     validInput({ file: validFile({ name: "C:\\fakepath\\" }) }),
   );
@@ -103,7 +103,7 @@ test("rejects path-only and overlong file names", () => {
   assert.ok(longName.fieldErrors.file);
 });
 
-test("an edit can clear the description without choosing a file", () => {
+test("編集時はファイルを選択せずに説明を空欄にできる", () => {
   assert.deepEqual(validateMaterialEditInput({ title: "  改訂版  ", description: "  ", file: null }), {
     success: true,
     data: { title: "改訂版", description: null, file: null },
@@ -111,7 +111,7 @@ test("an edit can clear the description without choosing a file", () => {
   assert.equal(validateMaterialEditInput({ title: "改訂版", description: "", file: "bad" }).success, false);
 });
 
-test("a replacement applies the same size and format limits as a new upload", () => {
+test("差し替えにも新規アップロードと同じ形式とサイズの制限を適用する", () => {
   assert.equal(validateMaterialEditInput(validInput({ file: validFile({ size: MAX_MATERIAL_FILE_SIZE }) })).success, true);
   for (const file of [
     validFile({ size: 0 }),

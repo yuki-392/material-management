@@ -1,6 +1,6 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ファイルを除外する方法は https://help.github.com/articles/ignoring-files/ を参照。
 
-# dependencies
+# 依存パッケージ
 /node_modules
 /.pnp
 .pnp.*
@@ -10,38 +10,38 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# テストの出力
 /coverage
 
-# next.js
+# Next.jsの出力
 /.next/
 /out/
 
-# production
+# 本番ビルドの出力
 /build
 
-# misc
+# OSの管理ファイルと鍵ファイル
 .DS_Store
 *.pem
 
-# debug
+# デバッグログ
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# 環境変数ファイル。必要なものは明示的に追跡対象に含める。
 .env*
 !.env.example
 
-# vercel
+# Vercelのローカル設定
 .vercel
 
-# typescript
+# TypeScriptの生成ファイル
 *.tsbuildinfo
 next-env.d.ts
 
-# Prisma Client generated from prisma/schema.prisma
+# prisma/schema.prismaから生成したPrisma Client
 /src/generated/prisma/
 
 docs/interview-prep.md

@@ -44,7 +44,7 @@ export async function ensureMaterialBucket(s3, bucket) {
 }
 
 /**
- * Upload an object to a bucket that has already been provisioned.
+ * 作成済みのバケットにオブジェクトをアップロードする。
  * @param {S3Client} s3
  * @param {{bucket: string, key: string, body: Uint8Array, contentType: string, sizeBytes: number}} input
  */

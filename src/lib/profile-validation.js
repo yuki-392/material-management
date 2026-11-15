@@ -8,7 +8,7 @@ export const MAX_STUDENT_NUMBER_LENGTH = 50;
  */
 
 /**
- * Validate and normalize untrusted profile form values.
+ * プロフィールフォームから送信された値を検証し、正規化する。
  *
  * @param {{ name: unknown, userType: unknown, studentNumber: unknown }} input
  * @returns {ProfileValidationResult}

@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { getTaskDeadlineHint } from "../src/lib/task-presentation.js";
 
-test("marks overdue open tasks and leaves completed or undated tasks quiet", () => {
+test("未完了で期限を過ぎたタスクに期限超過を表示し、完了済みや締切未設定のタスクには表示しない", () => {
   const now = new Date("2026-11-06T03:00:00.000Z");
 
   assert.equal(
@@ -17,7 +17,7 @@ test("marks overdue open tasks and leaves completed or undated tasks quiet", () 
   assert.equal(getTaskDeadlineHint(null, "TODO", now), "");
 });
 
-test("uses Tokyo calendar days for today's and upcoming deadlines", () => {
+test("今日と今後の締切を日本時間の日付で判定する", () => {
   const now = new Date("2026-11-06T14:30:00.000Z");
 
   assert.equal(

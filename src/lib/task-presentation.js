@@ -6,7 +6,7 @@ const TOKYO_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
 });
 
 /**
- * Return a short urgency hint for an open task using Tokyo calendar days.
+ * 未完了タスクの締切の近さを、日本時間の日付に基づく短い文言で返す。
  * @param {Date | null} dueAt
  * @param {"TODO" | "IN_PROGRESS" | "DONE"} status
  * @param {Date} [now]

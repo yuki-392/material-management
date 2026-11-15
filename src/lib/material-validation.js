@@ -55,8 +55,8 @@ function validateMaterialMetadata(title, description) {
 }
 
 /**
- * Validate fields submitted by the browser. This deliberately checks both the
- * extension and browser-provided MIME type; it does not inspect file bytes.
+ * ブラウザーから送信された項目を検証する。拡張子とブラウザーが送信したMIMEタイプを照合する。
+ * ファイル本体のバイト列は検査の対象外とする。
  *
  * @param {{title: unknown, description: unknown, file: unknown}} input
  * @returns {MaterialValidationResult}

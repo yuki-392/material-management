@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { getSafeMaterialErrorDetails } from "../src/lib/material-error-logging.js";
 
-test("keeps only safe structured fields from storage errors", () => {
+test("ストレージのエラーから安全に記録できる構造化フィールドだけを取り出す", () => {
   const error = Object.assign(
     new Error("request URL contains a private key and filename.pdf"),
     {
@@ -27,7 +27,7 @@ test("keeps only safe structured fields from storage errors", () => {
   assert.doesNotMatch(JSON.stringify(details), /private|filename|labs/);
 });
 
-test("handles errors without provider metadata", () => {
+test("ストレージ事業者のメタデータがないエラーも処理する", () => {
   assert.deepEqual(
     getSafeMaterialErrorDetails("material.file-read", new Error("details")),
     { stage: "material.file-read", name: "Error" },

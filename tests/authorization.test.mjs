@@ -65,14 +65,14 @@ function hasCode(code) {
     typeof error.status === "number";
 }
 
-test("requireUser rejects a request without an authenticated session", async () => {
+test("requireUserは認証済みセッションがないリクエストを拒否する", async () => {
   const { helpers, calls } = createFixture({ session: null });
 
   await assert.rejects(helpers.requireUser(), hasCode("UNAUTHENTICATED"));
   assert.deepEqual(calls, []);
 });
 
-test("requireProfileCompleteUser returns the session user after checking the profile", async () => {
+test("requireProfileCompleteUserはプロフィールの完了を確認してセッションのユーザーを返す", async () => {
   const { helpers, calls } = createFixture();
 
   assert.deepEqual(await helpers.requireProfileCompleteUser(), { id: "user-1" });
@@ -85,7 +85,7 @@ test("requireProfileCompleteUser returns the session user after checking the pro
   });
 });
 
-test("requireProfileCompleteUser rejects unauthenticated and incomplete users", async () => {
+test("requireProfileCompleteUserは未認証またはプロフィールが未完了の場合に拒否する", async () => {
   const unauthenticated = createFixture({ session: null });
   await assert.rejects(
     unauthenticated.helpers.requireProfileCompleteUser(),
@@ -101,7 +101,7 @@ test("requireProfileCompleteUser rejects unauthenticated and incomplete users", 
   );
 });
 
-test("requireLabMember checks the session user and only selects the membership labId", async () => {
+test("requireLabMemberはセッションのユーザーを確認し、所属情報からlabIdだけを取得する", async () => {
   const { helpers, calls } = createFixture();
 
   assert.deepEqual(await helpers.requireLabMember("lab-1"), {
@@ -124,7 +124,7 @@ test("requireLabMember checks the session user and only selects the membership l
   });
 });
 
-test("requireLabMember rejects a user who belongs to no Lab with a non-enumerating 404", async () => {
+test("requireLabMemberはLab未所属のユーザーに対して存在の有無を区別できない404相当のエラーを返す", async () => {
   const { helpers } = createFixture({ membership: null });
 
   await assert.rejects(helpers.requireLabMember("lab-1"), (error) => {
@@ -134,7 +134,7 @@ test("requireLabMember rejects a user who belongs to no Lab with a non-enumerati
   });
 });
 
-test("requireLabMember treats membership in another Lab like a missing Lab", async () => {
+test("requireLabMemberは別のLabに所属している場合にLabが見つからない場合と同じエラーを返す", async () => {
   const { helpers } = createFixture({
     membership: { labId: "lab-2", userId: "user-1" },
   });
@@ -146,7 +146,7 @@ test("requireLabMember treats membership in another Lab like a missing Lab", asy
   });
 });
 
-test("requireLabMember blocks a profile that is not complete", async () => {
+test("requireLabMemberはプロフィールが未完了のユーザーを拒否する", async () => {
   const { helpers, calls } = createFixture({
     profile: { userType: "STUDENT", studentNumber: null },
   });
@@ -158,7 +158,7 @@ test("requireLabMember blocks a profile that is not complete", async () => {
   assert.equal(calls.some((call) => call.model === "labMember"), false);
 });
 
-test("requireLabOwner allows an owner who is also a Lab member", async () => {
+test("requireLabOwnerは対象Labに所属するOwnerを許可する", async () => {
   const { helpers, calls } = createFixture();
 
   assert.deepEqual(await helpers.requireLabOwner("lab-1"), {
@@ -177,7 +177,7 @@ test("requireLabOwner allows an owner who is also a Lab member", async () => {
   });
 });
 
-test("requireLabOwner rejects a regular member without exposing a non-member Lab", async () => {
+test("requireLabOwnerは一般メンバーを拒否し、未所属のLabの存在を明かさない", async () => {
   const { helpers } = createFixture({ lab: { ownerId: "user-2" } });
 
   await assert.rejects(helpers.requireLabOwner("lab-1"), (error) => {
@@ -187,7 +187,7 @@ test("requireLabOwner rejects a regular member without exposing a non-member Lab
   });
 });
 
-test("requireLabOwner returns the same 404 for a non-member as requireLabMember", async () => {
+test("requireLabOwnerは対象Labに所属していない場合にrequireLabMemberと同じ404相当のエラーを返す", async () => {
   const { helpers } = createFixture({
     membership: { labId: "lab-2", userId: "user-1" },
     lab: null,

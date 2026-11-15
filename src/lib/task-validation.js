@@ -18,9 +18,8 @@ const TOKYO_LOCAL_DATE_TIME_PATTERN =
  */
 
 /**
- * Validate FormData-derived task fields without trusting browser validation.
- * `datetime-local` input is interpreted in Asia/Tokyo and converted to an
- * absolute instant before it is stored in PostgreSQL timestamptz.
+ * FormDataから受け取ったタスクの項目をサーバー側で検証する。
+ * `datetime-local`の入力はAsia/Tokyoの時刻として解釈し、時点を確定してからPostgreSQLのtimestamptzに保存する。
  *
  * @param {{ title: unknown, description: unknown, status: unknown, assigneeId: unknown, dueAt: unknown }} input
  * @returns {TaskValidationResult}
@@ -145,7 +144,7 @@ function parseTokyoDateTime(value) {
 }
 
 /**
- * Format a stored instant for an Asia/Tokyo `datetime-local` input.
+ * 保存された日時を、Asia/Tokyoの`datetime-local`入力欄で使える形式に整える。
  *
  * @param {Date | null} value
  */

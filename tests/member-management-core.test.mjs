@@ -132,7 +132,7 @@ function expectMemberError(code) {
     error instanceof MemberManagementError && error.code === code;
 }
 
-test("adds an existing user by case-insensitive email inside a transaction", async () => {
+test("メールアドレスの大文字・小文字を区別せず既存ユーザーを探し、トランザクション内で追加する", async () => {
   const { db, state, calls } = createFakeDatabase({
     users: [{ id: "user-new", email: "Student@Example.edu" }],
   });
@@ -156,7 +156,7 @@ test("adds an existing user by case-insensitive email inside a transaction", asy
   assert.ok(calls.some(([name]) => name === "transaction"));
 });
 
-test("allows another distinct user to join a Lab that already has a member", async () => {
+test("メンバーがいるLabにも別のユーザーを追加できる", async () => {
   const { db, state } = createFakeDatabase({
     memberships: [{ labId: "lab-1", userId: "existing-member" }],
   });
@@ -173,7 +173,7 @@ test("allows another distinct user to join a Lab that already has a member", asy
   ]);
 });
 
-test("does not add an email without an existing application user", async () => {
+test("登録済みユーザーに紐づかないメールアドレスは追加できない", async () => {
   const { db, state } = createFakeDatabase({ users: [] });
 
   await assert.rejects(
@@ -187,7 +187,7 @@ test("does not add an email without an existing application user", async () => {
   assert.deepEqual(state.memberships, []);
 });
 
-test("rejects adding the owner as a member again", async () => {
+test("Ownerをメンバーとして再追加できない", async () => {
   const { db, state } = createFakeDatabase({
     users: [{ id: "owner-1", email: "owner@example.edu" }],
   });
@@ -203,7 +203,7 @@ test("rejects adding the owner as a member again", async () => {
   assert.deepEqual(state.memberships, []);
 });
 
-test("rejects a user who is already a member of this Lab", async () => {
+test("同じLabに所属しているユーザーは再追加できない", async () => {
   const existing = [{ labId: "lab-1", userId: "user-new" }];
   const { db, state } = createFakeDatabase({ memberships: existing });
 
@@ -218,7 +218,7 @@ test("rejects a user who is already a member of this Lab", async () => {
   assert.deepEqual(state.memberships, existing);
 });
 
-test("rejects a user who belongs to a different Lab", async () => {
+test("別のLabに所属しているユーザーは追加できない", async () => {
   const existing = [{ labId: "lab-2", userId: "user-new" }];
   const { db, state } = createFakeDatabase({ memberships: existing });
 
@@ -233,7 +233,7 @@ test("rejects a user who belongs to a different Lab", async () => {
   assert.deepEqual(state.memberships, existing);
 });
 
-test("maps a userId unique conflict to a safe already-assigned error", async () => {
+test("userIdの一意制約違反を既にLabに所属していることを示すエラーに変換する", async () => {
   const { db, state } = createFakeDatabase({
     memberships: [{ labId: "lab-race", userId: "user-new" }],
   });
@@ -261,7 +261,7 @@ test("maps a userId unique conflict to a safe already-assigned error", async () 
   ]);
 });
 
-test("removes membership and clears only tasks assigned in that Lab", async () => {
+test("メンバーを削除し、対象Labでその人が担当するタスクだけ担当を解除する", async () => {
   const tasks = [
     { id: "task-1", labId: "lab-1", assigneeId: "user-new" },
     { id: "task-2", labId: "lab-1", assigneeId: "other-user" },
@@ -294,7 +294,7 @@ test("removes membership and clears only tasks assigned in that Lab", async () =
   assert.deepEqual(calls.slice(2).map(([name]) => name), ["task.updateMany", "labMember.delete"]);
 });
 
-test("cannot remove the owner", async () => {
+test("Ownerはメンバーから削除できない", async () => {
   const { db, state, calls } = createFakeDatabase({
     memberships: [{ labId: "lab-1", userId: "owner-1" }],
   });
@@ -311,7 +311,7 @@ test("cannot remove the owner", async () => {
   assert.deepEqual(state.memberships, [{ labId: "lab-1", userId: "owner-1" }]);
 });
 
-test("cannot remove someone who is not a member of this Lab", async () => {
+test("対象Labに所属していないユーザーは削除できない", async () => {
   const { db, state } = createFakeDatabase({
     memberships: [{ labId: "lab-2", userId: "user-new" }],
   });
@@ -327,7 +327,7 @@ test("cannot remove someone who is not a member of this Lab", async () => {
   assert.deepEqual(state.memberships, [{ labId: "lab-2", userId: "user-new" }]);
 });
 
-test("rolls back task assignment clearing if membership deletion fails", async () => {
+test("所属の削除が失敗した場合はタスクの担当解除を取り消す", async () => {
   const memberships = [
     { labId: "lab-1", userId: "owner-1" },
     { labId: "lab-1", userId: "user-new" },
@@ -351,7 +351,7 @@ test("rolls back task assignment clearing if membership deletion fails", async (
   assert.deepEqual(state.tasks, tasks);
 });
 
-test("rolls back when clearing task assignments fails", async () => {
+test("タスクの担当解除が失敗した場合はメンバー削除を取り消す", async () => {
   const memberships = [
     { labId: "lab-1", userId: "owner-1" },
     { labId: "lab-1", userId: "user-new" },

@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { getMissingAuthEnvironmentVariables } from "../src/lib/auth-environment.js";
 
-test("reports required Auth.js variables without exposing their values", () => {
+test("必須のAuth.js環境変数を値を公開せずに報告する", () => {
   const missing = getMissingAuthEnvironmentVariables({
     AUTH_SECRET: "local-secret-value",
     AUTH_GOOGLE_ID: "google-client-id-value",
@@ -14,7 +14,7 @@ test("reports required Auth.js variables without exposing their values", () => {
   assert.equal(JSON.stringify(missing).includes("google-client-id-value"), false);
 });
 
-test("reports blank and whitespace-only Auth.js variables as missing", () => {
+test("空欄や空白のみのAuth.js環境変数を未設定と判定する", () => {
   const missing = getMissingAuthEnvironmentVariables({
     AUTH_SECRET: " ",
     AUTH_GOOGLE_ID: "",
@@ -24,7 +24,7 @@ test("reports blank and whitespace-only Auth.js variables as missing", () => {
   assert.deepEqual(missing, ["AUTH_SECRET", "AUTH_GOOGLE_ID"]);
 });
 
-test("reports no missing Auth.js variables when all values are present", () => {
+test("Auth.jsの必須環境変数がすべて設定済みなら不足を報告しない", () => {
   const missing = getMissingAuthEnvironmentVariables({
     AUTH_SECRET: "local-secret-value",
     AUTH_GOOGLE_ID: "google-client-id-value",

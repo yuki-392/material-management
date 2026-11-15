@@ -14,7 +14,7 @@ const validInput = {
   dueAt: "2026-10-01T09:30",
 };
 
-test("trims the title and description and parses Tokyo local time", () => {
+test("タイトルと説明の前後の空白を除き、日本時間の締切を解釈する", () => {
   const result = validateTaskInput(validInput);
 
   assert.equal(result.success, true);
@@ -27,7 +27,7 @@ test("trims the title and description and parses Tokyo local time", () => {
   });
 });
 
-test("accepts unassigned tasks without a due date", () => {
+test("担当者と締切が未設定のタスクを受け付ける", () => {
   const result = validateTaskInput({
     ...validInput,
     description: "   ",
@@ -42,7 +42,7 @@ test("accepts unassigned tasks without a due date", () => {
   assert.equal(result.data.dueAt, null);
 });
 
-test("rejects a missing, empty, or overly long title", () => {
+test("タイトルが未入力・空欄・文字数超過の場合は拒否する", () => {
   for (const title of [null, "   ", "x".repeat(201)]) {
     const result = validateTaskInput({ ...validInput, title });
     assert.equal(result.success, false);
@@ -50,7 +50,7 @@ test("rejects a missing, empty, or overly long title", () => {
   }
 });
 
-test("rejects an overly long description and unsupported status", () => {
+test("説明が長すぎる場合や未対応の状態が指定された場合は拒否する", () => {
   const longDescription = validateTaskInput({
     ...validInput,
     description: "x".repeat(5001),
@@ -63,7 +63,7 @@ test("rejects an overly long description and unsupported status", () => {
   assert.ok(invalidStatus.fieldErrors.status);
 });
 
-test("rejects malformed assignee and due date values", () => {
+test("形式が不正な担当者と締切を拒否する", () => {
   const invalidAssignee = validateTaskInput({ ...validInput, assigneeId: 7 });
   assert.equal(invalidAssignee.success, false);
   assert.ok(invalidAssignee.fieldErrors.assigneeId);
@@ -75,7 +75,7 @@ test("rejects malformed assignee and due date values", () => {
   }
 });
 
-test("formats a stored instant as an Asia/Tokyo datetime-local value", () => {
+test("保存された日時を日本時間のdatetime-local入力用に整形する", () => {
   assert.equal(
     formatTokyoDateTimeLocal(new Date("2026-10-01T00:30:00.000Z")),
     "2026-10-01T09:30",

@@ -56,9 +56,8 @@ export class AuthorizationError extends Error {
 }
 
 /**
- * A profile is complete when its classification-specific student number rule
- * is satisfied. A display name is editable but is not a completion requirement
- * in the current product requirements.
+ * ユーザー種別ごとの学生番号の条件を満たせば、プロフィールは完了と判定する。
+ * 表示名は編集できる任意項目。
  *
  * @param {{ userType: string | null, studentNumber: string | null } | null} profile
  */
@@ -78,9 +77,8 @@ export function isProfileComplete(profile) {
 }
 
 /**
- * Build server-side authorization helpers around Auth.js and Prisma.
- * Dependencies are injected so the decisions and query boundaries can be tested
- * without a live database or an Auth.js session.
+ * Auth.jsとPrismaを使ってサーバー側の認可関数を作る。
+ * 依存を引数で受け取り、実際のDBやAuth.jsのセッションなしで認可の判定と検索範囲をテストできるようにする。
  *
  * @param {{ getSession: () => Promise<{ user?: { id?: string | null } } | null>, db: AuthorizationDatabase }} dependencies
  */

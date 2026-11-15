@@ -60,8 +60,7 @@ export class TaskOperationError extends Error {
 }
 
 /**
- * Read Task rows inside one Lab. Call only after the viewer's membership has
- * been checked by `requireLabMember`.
+ * 対象Labのタスクを取得する。`requireLabMember`で閲覧者の所属を確認してから呼び出す。
  *
  * @param {import("../generated/prisma/client").PrismaClient} db
  * @param {{labId: string, query?: string, status?: "TODO" | "IN_PROGRESS" | "DONE", assigneeId?: string | null, page?: number, sort?: "recent" | "due", overdueBefore?: Date}} input
@@ -136,8 +135,7 @@ export function createTask(db, labId, data) {
 }
 
 /**
- * Update uses both the Task id and Lab id in its reads and write, so a caller
- * cannot edit a Task from another Lab by substituting its id.
+ * 参照と更新をタスクIDとLab IDの両方で絞り込み、別LabのタスクIDを指定しても更新できないようにする。
  *
  * @param {TaskDatabase} db
  * @param {string} labId
@@ -171,7 +169,7 @@ export function updateTask(db, labId, taskId, data) {
 }
 
 /**
- * Update only the status on a Task in the requested Lab.
+ * 対象Lab内のタスクの状態だけを更新する。
  * @param {import("../generated/prisma/client").PrismaClient} db
  * @param {string} labId
  * @param {string} taskId

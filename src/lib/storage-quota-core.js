@@ -39,7 +39,7 @@ export function getStorageUsageState(usedBytes, limitBytes) {
 }
 
 /**
- * Parse a decimal GB value with at most nine fractional digits (one byte).
+ * 10進GBの値を小数点以下9桁まで読み取り、1バイト単位に変換する。
  * @param {unknown} value
  * @returns {bigint | null}
  */
@@ -82,9 +82,9 @@ export function isAppAdminEmail(email, allowlist) {
 }
 
 /**
- * Reserve capacity before writing to object storage. The singleton control
- * row is updated first in every quota transaction so concurrent uploads and
- * quota changes serialize through the same PostgreSQL row lock.
+ * オブジェクトストレージに書き込む前に容量を予約する。
+ * 容量管理の各トランザクションで共通の管理行を先に更新し、同時アップロードと割当変更を
+ * PostgreSQLの同じ行ロックで直列化する。
  *
  * @param {any} db
  * @param {{labId: string, sizeBytes: number, now?: Date}} input
@@ -171,9 +171,8 @@ export async function releaseStorageUpload(db, reservationId) {
 }
 
 /**
- * Convert an active reservation into a Material row atomically. Expired
- * reservations are removed here too, so a slow request cannot reuse a stale
- * reservation after another request has released its capacity.
+ * 有効な容量予約を同じトランザクションで資料行に置き換える。
+ * 期限切れの予約も取り除き、処理が遅れたリクエストによる解放済み容量の再利用を防ぐ。
  * @param {any} db
  * @param {string} reservationId
  * @param {Record<string, unknown>} materialData
@@ -189,7 +188,7 @@ export async function commitStorageUpload(
 }
 
 /**
- * Apply the replacement and consume its growth reservation in one transaction.
+ * 資料の差し替えと増加分の容量予約の消費を同じトランザクションで行う。
  * @param {any} db
  * @param {string} reservationId
  * @param {(tx: any) => Promise<void>} update
@@ -241,7 +240,7 @@ async function consumeStorageReservation(db, reservationId, update, now) {
   return result.material;
 }
 
-/** Remove expired reservations and their counter value under the quota lock. */
+/** 容量管理のロックを取ったうえで期限切れの予約を削除し、予約容量の合計から差し引く。 */
 export async function expireStorageReservations(db, now = new Date()) {
   return db.$transaction(async (tx) => {
     await lockStorageControl(tx);
@@ -269,8 +268,7 @@ export async function expireStorageReservations(db, now = new Date()) {
 }
 
 /**
- * Change one Lab's allocation without allowing a quota below registered or
- * currently reserved file sizes.
+ * 保存済みファイルと有効な予約の合計を下回らない範囲で、対象Labの割当を変更する。
  * @param {any} db
  * @param {{labId: string, limitBytes: bigint, now?: Date}} input
  */
@@ -331,7 +329,7 @@ export async function updateLabStorageLimit(
 }
 
 /**
- * Read a Lab's recorded and in-flight usage for the member-facing warning.
+ * メンバーに警告を表示するため、対象Labの保存済み使用量と予約容量を取得する。
  * @param {any} db
  * @param {string} labId
  * @param {Date} [now]
@@ -380,8 +378,8 @@ export async function getLabStorageUsage(db, labId, now = new Date()) {
 }
 
 /**
- * Return minimal admin DTOs and aggregate usage. No user or file metadata is
- * included in the result.
+ * 管理画面に必要な最小限のデータと使用量の集計を返す。
+ * ユーザー情報やファイルのメタデータは含めない。
  * @param {any} db
  * @param {Date} [now]
  * @returns {Promise<StorageOverview>}

@@ -64,7 +64,7 @@ export function EditMaterialForm({
 }) {
   const [state, formAction, isPending] = useActionState(async (previous: MaterialFormState, data: FormData) => {
     const file = data.get("file");
-    // Remove the native empty picker before React serializes the request.
+    // Reactがリクエストをシリアライズする前に、未選択時の空のFileを取り除く。
     if (file instanceof File && file.name === "" && file.size === 0) {
       data.delete("file");
     }

@@ -51,8 +51,8 @@ export class MemberManagementError extends Error {
 }
 
 /**
- * Look up an existing account by email and add it if it has no Lab membership.
- * The database unique constraint on LabMember.userId is the final race guard.
+ * メールアドレスで登録済みのユーザーを検索し、Labに未所属の場合に追加する。
+ * 同時に追加された場合の重複は、DBのLabMember.userIdの一意制約で防ぐ。
  *
  * @param {MemberManagementDatabase} db
  * @param {{ labId: string, ownerId: string, email: string }} input
@@ -113,8 +113,7 @@ export async function addMemberByEmail(db, { labId, ownerId, email }) {
 }
 
 /**
- * Clear the removed member's assignments in this Lab and delete membership
- * atomically so either both operations commit or neither does.
+ * 対象Lab内の担当解除とメンバーの所属削除を同じトランザクションで確定する。
  *
  * @param {MemberManagementDatabase} db
  * @param {{ labId: string, ownerId: string, userId: string }} input

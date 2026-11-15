@@ -13,7 +13,7 @@ import {
   putMaterialObject,
 } from "../src/lib/material-storage-commands.js";
 
-test("uploads an object without attempting to create its bucket", async () => {
+test("ファイルのアップロード時にバケットを作成しない", async () => {
   const commands = [];
   const client = {
     send: async (command) => {
@@ -34,7 +34,7 @@ test("uploads an object without attempting to create its bucket", async () => {
   assert.equal(commands[0].input.Bucket, "lab-materials");
 });
 
-test("creates the local bucket during setup and tolerates an existing bucket", async () => {
+test("ローカルの初期設定でバケットを作成し、既に存在する場合も続行する", async () => {
   const commands = [];
   const client = {
     send: async (command) => {
@@ -52,7 +52,7 @@ test("creates the local bucket during setup and tolerates an existing bucket", a
   assert.equal(commands[0].input.Bucket, "lab-materials");
 });
 
-test("does not hide local bucket setup failures other than an existing bucket", async () => {
+test("バケットが既に存在する場合以外はローカル初期設定の失敗を伝える", async () => {
   const accessDenied = Object.assign(new Error("denied"), {
     name: "AccessDenied",
   });
@@ -64,7 +64,7 @@ test("does not hide local bucket setup failures other than an existing bucket", 
   );
 });
 
-test("converts an S3 missing-key error to a missing body", async () => {
+test("S3のNoSuchKeyを本文なしの取得結果に変換する", async () => {
   const client = {
     async send(command) {
       assert.ok(command instanceof GetObjectCommand);
@@ -75,7 +75,7 @@ test("converts an S3 missing-key error to a missing body", async () => {
   assert.deepEqual(await getMaterialObject(client, "lab-materials", "old-key"), { body: null });
 });
 
-test("preserves storage errors other than NoSuchKey", async () => {
+test("NoSuchKey以外のストレージエラーはそのまま返す", async () => {
   for (const [name, status] of [["AccessDenied", 403], ["NoSuchBucket", 404], ["TimeoutError", undefined]]) {
     const failure = Object.assign(new Error(name), { name, $metadata: { httpStatusCode: status } });
     const client = { async send() { throw failure; } };

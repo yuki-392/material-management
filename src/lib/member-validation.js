@@ -2,9 +2,8 @@ const MAX_EMAIL_LENGTH = 254;
 const BASIC_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 
 /**
- * Validate and normalize an email entered by a Lab owner.
- * Lowercasing is used for lookup because email addresses are treated
- * case-insensitively by this application.
+ * LabのOwnerが入力したメールアドレスを検証し、正規化する。
+ * このアプリでは大文字・小文字を区別しないため、検索用の値は小文字に統一する。
  *
  * @param {unknown} value
  * @returns {{ success: true, email: string } | { success: false, error: string }}

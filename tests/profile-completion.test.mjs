@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { isProfileComplete } from "../src/lib/authorization-core.js";
 
-test("a teacher profile is complete only when student number is absent", () => {
+test("教員のプロフィールは学生番号が未設定の場合に限り完了と判定する", () => {
   assert.equal(
     isProfileComplete({ userType: "TEACHER", studentNumber: null }),
     true,
@@ -14,7 +14,7 @@ test("a teacher profile is complete only when student number is absent", () => {
   );
 });
 
-test("a student profile is complete only when student number has content", () => {
+test("学生のプロフィールは学生番号が入力されている場合に限り完了と判定する", () => {
   assert.equal(
     isProfileComplete({ userType: "STUDENT", studentNumber: " s12345 " }),
     true,
@@ -25,7 +25,7 @@ test("a student profile is complete only when student number has content", () =>
   );
 });
 
-test("missing and unsupported profile data is incomplete", () => {
+test("プロフィールが未入力または未対応の値を含む場合は未完了と判定する", () => {
   assert.equal(isProfileComplete(null), false);
   assert.equal(isProfileComplete({ userType: null, studentNumber: null }), false);
   assert.equal(isProfileComplete({ userType: "ADMIN", studentNumber: null }), false);

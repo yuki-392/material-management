@@ -16,14 +16,14 @@ import {
   parseTaskStatus,
 } from "../src/lib/list-query.js";
 
-test("normalizes a list search query and caps its length", () => {
+test("一覧の検索語を正規化し、文字数の上限を適用する", () => {
   assert.equal(parseListSearch("  review paper  "), "review paper");
   assert.equal(parseListSearch("あ".repeat(101)).length, 100);
   assert.equal(parseListSearch(["first", "second"]), "");
   assert.equal(parseListSearch(undefined), "");
 });
 
-test("accepts only valid task statuses and material type filters", () => {
+test("有効なタスクの状態と資料の形式だけを絞り込み条件として受け付ける", () => {
   assert.equal(parseTaskStatus("IN_PROGRESS"), "IN_PROGRESS");
   assert.equal(parseTaskStatus("all"), "");
   assert.equal(parseTaskStatus(["DONE"]), "");
@@ -43,7 +43,7 @@ test("accepts only valid task statuses and material type filters", () => {
   assert.equal(parseMaterialUploader(["member-1"], ["member-1"]), "");
 });
 
-test("normalizes invalid page numbers and builds filter-preserving page links", () => {
+test("不正なページ番号を補正し、絞り込み条件を維持するページリンクを作る", () => {
   assert.equal(parseListPage("3"), 3);
   assert.equal(parseListPage("0"), 1);
   assert.equal(parseListPage("1.5"), 1);
@@ -60,7 +60,7 @@ test("normalizes invalid page numbers and builds filter-preserving page links", 
   );
 });
 
-test("parses task views, focus filters, sorting, and independent board pages", () => {
+test("タスクの表示形式、絞り込み、並び順、ボード各列のページ番号を読み取る", () => {
   assert.equal(parseTaskView("board"), "board");
   assert.equal(parseTaskView("invalid"), "list");
   assert.equal(parseTaskFocus("overdue"), "overdue");
@@ -73,7 +73,7 @@ test("parses task views, focus filters, sorting, and independent board pages", (
   );
 });
 
-test("keeps task view, sort, focus, and board columns in navigation links", () => {
+test("一覧のリンクにタスクの表示形式、並び順、絞り込み、ボード各列のページ番号を引き継ぐ", () => {
   assert.equal(
     buildListPageHref("/labs/lab-1/tasks", {
       q: "paper notes",

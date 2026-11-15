@@ -137,7 +137,7 @@ export async function updateMaterialAction(
   }
 
   const file = formData.get("file");
-  // Native multipart forms submit an empty File when the picker is unused.
+  // multipartフォームでは、ファイルを選ばなくても空のFileが送信される。
   const replacement = isFileEntry(file) && file.name === "" && file.size === 0 ? null : file;
   const validation = validateMaterialEditInput({
     title: formData.get("title"),

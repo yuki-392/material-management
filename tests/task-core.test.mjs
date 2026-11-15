@@ -111,7 +111,7 @@ function expectTaskError(code) {
   return (error) => error instanceof TaskOperationError && error.code === code;
 }
 
-test("searches, filters, and paginates tasks within the authorized Lab", async () => {
+test("認可済みLab内のタスクを検索・絞り込み・ページ分割する", async () => {
   const calls = [];
   const expectedTasks = [{ id: "task-21", labId: "lab-1", title: "Own task" }];
   const db = {
@@ -162,7 +162,7 @@ test("searches, filters, and paginates tasks within the authorized Lab", async (
   assert.equal(calls[1][1].select.assignee.select.email, true);
 });
 
-test("filters unassigned tasks and clamps a stale page to the last page", async () => {
+test("担当者未設定のタスクに絞り込み、範囲外のページ番号を最終ページに補正する", async () => {
   let findManyArgs;
   const db = {
     task: {
@@ -188,7 +188,7 @@ test("filters unassigned tasks and clamps a stale page to the last page", async 
   assert.equal(findManyArgs.skip, 20);
 });
 
-test("orders tasks by deadline and can limit results to overdue open tasks", async () => {
+test("締切順に並べ替え、期限を過ぎた未完了タスクに絞り込める", async () => {
   let countArgs;
   let findManyArgs;
   const db = {
@@ -225,7 +225,7 @@ test("orders tasks by deadline and can limit results to overdue open tasks", asy
   ]);
 });
 
-test("updates only a Task status when both its id and Lab match", async () => {
+test("タスクIDとLabが両方一致する場合に状態だけを更新する", async () => {
   const task = {
     id: "task-1",
     labId: "lab-1",
@@ -254,7 +254,7 @@ test("updates only a Task status when both its id and Lab match", async () => {
   );
 });
 
-test("rejects invalid Task statuses before writing", async () => {
+test("無効なタスクの状態はDBに書き込む前に拒否する", async () => {
   const task = { id: "task-1", labId: "lab-1", ...taskInput };
   const { db, state, calls } = createFakeDatabase({ tasks: [task] });
 
@@ -266,7 +266,7 @@ test("rejects invalid Task statuses before writing", async () => {
   assert.equal(calls.some(([name]) => name === "task.updateMany"), false);
 });
 
-test("does not update a Task outside the requested Lab", async () => {
+test("指定したLabの外にあるタスクの状態を更新しない", async () => {
   const task = { id: "task-1", labId: "lab-2", ...taskInput };
   const { db, state, calls } = createFakeDatabase({ tasks: [task] });
 
@@ -285,7 +285,7 @@ test("does not update a Task outside the requested Lab", async () => {
   );
 });
 
-test("creates a Task with no assignee", async () => {
+test("担当者未設定のタスクを作成できる", async () => {
   const { db, state, calls } = createFakeDatabase();
 
   await createTask(db, "lab-1", taskInput);
@@ -300,7 +300,7 @@ test("creates a Task with no assignee", async () => {
   assert.deepEqual(calls.map(([name]) => name), ["transaction", "task.create"]);
 });
 
-test("creates a Task assigned to a member of the same Lab", async () => {
+test("同じLabのメンバーを担当者に指定してタスクを作成できる", async () => {
   const { db, state, calls } = createFakeDatabase({
     memberships: [{ labId: "lab-1", userId: "member-1" }],
   });
@@ -315,7 +315,7 @@ test("creates a Task assigned to a member of the same Lab", async () => {
   assert.equal(calls[2][0], "task.create");
 });
 
-test("rejects an assignee who belongs to another Lab", async () => {
+test("別のLabに所属するユーザーを担当者に指定できない", async () => {
   const { db, state } = createFakeDatabase({
     memberships: [{ labId: "lab-2", userId: "member-2" }],
   });
@@ -327,7 +327,7 @@ test("rejects an assignee who belongs to another Lab", async () => {
   assert.deepEqual(state.tasks, []);
 });
 
-test("updates a Task only when both its id and Lab match", async () => {
+test("タスクIDとLabが両方一致する場合にタスクを更新する", async () => {
   const task = {
     id: "task-1",
     labId: "lab-1",
@@ -351,7 +351,7 @@ test("updates a Task only when both its id and Lab match", async () => {
   );
 });
 
-test("locks the assignee membership before updating a Task", async () => {
+test("タスクを更新する前に担当者の所属行をロックする", async () => {
   const { db, state, calls } = createFakeDatabase({
     tasks: [{ id: "task-1", labId: "lab-1", ...taskInput }],
     memberships: [{ labId: "lab-1", userId: "member-1" }],
@@ -366,7 +366,7 @@ test("locks the assignee membership before updating a Task", async () => {
   assert.ok(lockIndex < calls.findIndex(([name]) => name === "task.updateMany"));
 });
 
-test("does not update a Task from a different Lab", async () => {
+test("別のLabのタスクを更新しない", async () => {
   const task = { id: "task-other", labId: "lab-2", ...taskInput };
   const { db, state, calls } = createFakeDatabase({ tasks: [task] });
 
@@ -387,7 +387,7 @@ test("does not update a Task from a different Lab", async () => {
   );
 });
 
-test("does not update when a new assignee is not a member of that Lab", async () => {
+test("新しい担当者が対象Labのメンバーでなければタスクを更新しない", async () => {
   const task = { id: "task-1", labId: "lab-1", ...taskInput };
   const { db, state } = createFakeDatabase({
     tasks: [task],
@@ -404,7 +404,7 @@ test("does not update when a new assignee is not a member of that Lab", async ()
   assert.equal(state.tasks[0].assigneeId, null);
 });
 
-test("deletes a Task only inside the authorized Lab", async () => {
+test("認可済みLab内のタスクだけを削除する", async () => {
   const tasks = [
     { id: "task-1", labId: "lab-1" },
     { id: "task-2", labId: "lab-2" },
@@ -420,7 +420,7 @@ test("deletes a Task only inside the authorized Lab", async () => {
   ]);
 });
 
-test("does not delete a Task from another Lab, returning the same missing error", async () => {
+test("別Labのタスクは削除せず、存在しないタスクと同じエラーを返す", async () => {
   const task = { id: "task-other", labId: "lab-2" };
   const { db, state, calls } = createFakeDatabase({ tasks: [task] });
 

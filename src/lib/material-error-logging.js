@@ -1,6 +1,6 @@
 /**
- * Return only stable error metadata that is safe to write to server logs.
- * Error messages and arbitrary properties are intentionally omitted.
+ * サーバーログに安全に出せる所定のエラー情報だけを返す。
+ * エラーのメッセージ本文や任意のプロパティは除く。
  * @param {string} stage
  * @param {unknown} error
  */
