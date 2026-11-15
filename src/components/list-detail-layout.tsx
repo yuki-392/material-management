@@ -8,16 +8,20 @@ export function ListDetailLayout({
   selection,
   hasDetail,
   listHref,
+  backLink,
   list,
   detail,
 }: {
   selection: string | null;
   hasDetail: boolean;
   listHref: string;
+  backLink?: { href: string; label: string };
   list: ReactNode;
   detail: ReactNode;
 }) {
   const router = useRouter();
+  const backHref = backLink?.href ?? listHref;
+  const scrollOnBack = Boolean(backLink);
   const previous = useRef<{ selection: string | null; hasDetail: boolean } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -27,7 +31,7 @@ export function ListDetailLayout({
     previous.current = { selection, hasDetail };
 
     if (selection !== null && before?.selection === selection && before.hasDetail && !hasDetail) {
-      router.replace(listHref, { scroll: false });
+      router.replace(backHref, { scroll: scrollOnBack });
       return;
     }
 
@@ -39,7 +43,7 @@ export function ListDetailLayout({
         .find((item) => item.dataset.listItem === before.selection);
       (previousItem ?? listRef.current?.querySelector<HTMLElement>("[data-list-heading]"))?.focus();
     }
-  }, [hasDetail, listHref, router, selection]);
+  }, [backHref, hasDetail, router, scrollOnBack, selection]);
 
   return (
     <div className="grid items-start gap-5 lg:grid-cols-2">
@@ -52,13 +56,13 @@ export function ListDetailLayout({
         ref={panelRef}
       >
         {selection !== null ? (
-          <Link className="mb-4 inline-flex min-h-11 items-center rounded-md text-sm font-semibold text-indigo-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700" href={listHref} scroll={false}>
-            ← 一覧へ戻る
+          <Link className="mb-4 inline-flex min-h-11 items-center rounded-md text-sm font-semibold text-indigo-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700" href={backHref} scroll={scrollOnBack}>
+            ← {backLink?.label ?? "一覧へ戻る"}
           </Link>
         ) : null}
         {hasDetail ? detail : (
           <h2 className="text-base font-semibold text-slate-700" data-detail-heading tabIndex={-1}>
-            {selection === null ? "一覧から項目を選択" : "この一覧では項目を表示できません"}
+            {selection === null ? "一覧から項目を選択" : backLink ? "項目を表示できません" : "この一覧では項目を表示できません"}
           </h2>
         )}
       </section>

@@ -114,6 +114,7 @@ export async function uploadMaterialAction(
 
   const path = getMaterialsPath(access.labId);
   revalidatePath(path);
+  revalidatePath("/labs");
   refresh();
   return { success: true };
 }
@@ -181,6 +182,7 @@ export async function updateMaterialAction(
   }
 
   revalidatePath(getMaterialsPath(access.labId));
+  revalidatePath("/labs");
   refresh();
   return { success: true };
 }
@@ -225,6 +227,7 @@ export async function deleteMaterialAction(
 
   const path = getMaterialsPath(access.labId);
   revalidatePath(path);
+  revalidatePath("/labs");
   refresh();
   return { success: true };
 }

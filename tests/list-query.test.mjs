@@ -104,3 +104,15 @@ test("選択IDのあるリンクは一覧条件とページを保持し、一覧
     assert.equal(parseListSelection(invalid), "");
   }
 });
+
+test("ホームからの詳細リンクは項目IDをエンコードし、ホームからの遷移を伝える", () => {
+  for (const [path, key] of [["tasks", "taskId"], ["materials", "materialId"]]) {
+    const pathName = `/labs/lab-1/${path}`;
+    const href = buildListPageHref(pathName, { [key]: "共有 & 資料", from: "home" });
+    const url = new URL(href, "https://example.test");
+    assert.equal(url.pathname, pathName);
+    assert.equal(url.searchParams.get(key), "共有 & 資料");
+    assert.equal(url.searchParams.get("from"), "home");
+    assert.equal(url.searchParams.has("page"), false);
+  }
+});

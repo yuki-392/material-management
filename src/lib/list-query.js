@@ -109,6 +109,7 @@ export function buildListPageHref(path, filters) {
     "donePage",
     "taskId",
     "materialId",
+    "from",
   ]) {
     const value = filters[key];
     if (typeof value === "string" && value) {

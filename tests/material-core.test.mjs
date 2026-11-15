@@ -6,6 +6,7 @@ import {
   createMaterial,
   createMaterialFileResponse,
   deleteMaterial,
+  findMaterialForLab,
   getMaterialFile,
   listLabMaterials,
 } from "../src/lib/material-core.js";
@@ -715,3 +716,16 @@ for (const [failureStage, label] of [
     });
   });
 }
+
+test("ホームから開く資料はIDと認可済みLabで絞り込み、詳細表示に必要な項目を取得する", async () => {
+  const row = materialRow();
+  const db = { material: { async findFirst({ where, select }) {
+    assert.equal(where.id, row.id);
+    assert.equal(select.updatedAt, true);
+    assert.equal(select.uploaderId, true);
+    return where.labId === row.labId ? row : null;
+  } } };
+
+  assert.equal(await findMaterialForLab(db, row.labId, row.id), row);
+  assert.equal(await findMaterialForLab(db, "other-lab", row.id), null);
+});

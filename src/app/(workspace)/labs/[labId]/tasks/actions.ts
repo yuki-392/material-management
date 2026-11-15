@@ -52,6 +52,7 @@ export async function createTaskAction(
   }
 
   revalidatePath(`/labs/${encodeURIComponent(access.labId)}/tasks`);
+  revalidatePath("/labs");
   refresh();
   return { success: true };
 }
@@ -89,6 +90,7 @@ export async function updateTaskAction(
   }
 
   revalidatePath(`/labs/${encodeURIComponent(access.labId)}/tasks`);
+  revalidatePath("/labs");
   refresh();
   return { success: true };
 }
@@ -132,6 +134,7 @@ export async function updateTaskStatusAction(
   }
 
   revalidatePath(`/labs/${encodeURIComponent(access.labId)}/tasks`);
+  revalidatePath("/labs");
   refresh();
   return { success: "タスクの状態を更新しました。", status: validatedStatus };
 }
@@ -162,6 +165,7 @@ export async function deleteTaskAction(
   }
 
   revalidatePath(`/labs/${encodeURIComponent(access.labId)}/tasks`);
+  revalidatePath("/labs");
   refresh();
   return { success: true };
 }

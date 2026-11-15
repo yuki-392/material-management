@@ -6,7 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { AuthorizationError, requireLabMember } from "@/lib/authorization";
 import { getMissingAuthEnvironmentVariables } from "@/lib/auth-environment.js";
 import { prisma } from "@/lib/db";
-import { listTasksForLab } from "@/lib/task-core.js";
+import { findTaskForLab, listTasksForLab } from "@/lib/task-core.js";
 import {
   buildListPageHref,
   parseListPage,
@@ -86,7 +86,9 @@ export default async function LabTasksPage({
     overdueBefore,
   };
 
-  const [tasks, todoTasks, inProgressTasks, doneTasks] = await Promise.all([
+  const selection = parseListSelection(rawSearchParams.taskId);
+  const fromHome = rawSearchParams.from === "home" && selection !== null && filters.view === "list";
+  const [tasks, todoTasks, inProgressTasks, doneTasks, homeTask] = await Promise.all([
     filters.view === "list"
       ? listTasksForLab(prisma, { ...queryOptions, status: filters.status || undefined, page: filters.page })
       : Promise.resolve(null),
@@ -99,6 +101,7 @@ export default async function LabTasksPage({
     filters.view === "board"
       ? listTasksForLab(prisma, { ...queryOptions, status: "DONE", page: filters.boardPages.DONE })
       : Promise.resolve(null),
+    fromHome && selection ? findTaskForLab(prisma, access.labId, selection) : null,
   ]);
 
   const boardColumns = filters.view === "board" && todoTasks && inProgressTasks && doneTasks
@@ -123,8 +126,7 @@ export default async function LabTasksPage({
     status: filters.view === "list" ? filters.status : undefined,
   });
 
-  const selection = parseListSelection(rawSearchParams.taskId);
-  const selectedTask = tasks?.items.find((task) => task.id === selection);
+  const selectedTask = fromHome ? homeTask : tasks?.items.find((task) => task.id === selection);
   const listFilters = { ...commonFilters, status: filters.status };
   const listQuery = { ...listFilters, page: tasks?.page };
   const listHref = buildListPageHref(tasksPath, listQuery);
@@ -232,6 +234,7 @@ export default async function LabTasksPage({
           selection={selection}
           hasDetail={Boolean(selectedTask)}
           listHref={listHref}
+          backLink={fromHome ? { href: "/labs", label: "ホームへ戻る" } : undefined}
           list={list}
           detail={selectedTask ? <TaskDetail key={selectedTask.id} labId={access.labId} members={members} task={selectedTask} /> : null}
         />

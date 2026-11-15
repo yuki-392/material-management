@@ -5,6 +5,7 @@ import {
   TaskOperationError,
   createTask,
   deleteTask,
+  findTaskForLab,
   listTasksForLab,
   updateTaskStatus,
   updateTask,
@@ -432,5 +433,25 @@ test("別Labのタスクは削除せず、存在しないタスクと同じエ�
   assert.deepEqual(calls.at(-1), [
     "task.deleteMany",
     { where: { id: "task-other", labId: "lab-1" } },
+  ]);
+});
+
+test("ホームから開くタスクはIDと認可済みLabの組み合わせで取得する", async () => {
+  const task = { id: "task-21", labId: "lab-1", ...taskInput };
+  const calls = [];
+  const db = { task: { async findFirst({ where, select }) {
+    calls.push(where);
+    assert.equal(select.description, true);
+    assert.ok(select.assignee.select.name);
+    return task.id === where.id && task.labId === where.labId ? task : null;
+  } } };
+
+  assert.equal(await findTaskForLab(db, "lab-1", "task-21"), task);
+  assert.equal(await findTaskForLab(db, "lab-2", "task-21"), null);
+  assert.equal(await findTaskForLab(db, "lab-1", "missing"), null);
+  assert.deepEqual(calls, [
+    { id: "task-21", labId: "lab-1" },
+    { id: "task-21", labId: "lab-2" },
+    { id: "missing", labId: "lab-1" },
   ]);
 });

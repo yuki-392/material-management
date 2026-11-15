@@ -59,6 +59,33 @@ export class TaskOperationError extends Error {
   }
 }
 
+/** @satisfies {import("../generated/prisma/client").Prisma.TaskSelect} */
+const taskDetailSelect = {
+  id: true,
+  title: true,
+  description: true,
+  status: true,
+  assigneeId: true,
+  dueAt: true,
+  createdAt: true,
+  assignee: {
+    select: { id: true, name: true, email: true },
+  },
+};
+
+/**
+ * Labへの所属を確認した後、指定された項目を同じLabから取得する。
+ * @param {import("../generated/prisma/client").PrismaClient} db
+ * @param {string} labId
+ * @param {string} taskId
+ */
+export function findTaskForLab(db, labId, taskId) {
+  return db.task.findFirst({
+    where: { id: taskId, labId },
+    select: taskDetailSelect,
+  });
+}
+
 /**
  * 対象Labのタスクを取得する。`requireLabMember`で閲覧者の所属を確認してから呼び出す。
  *
@@ -101,18 +128,7 @@ export async function listTasksForLab(db, input) {
         : [{ createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * LIST_PAGE_SIZE,
     take: LIST_PAGE_SIZE,
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      status: true,
-      assigneeId: true,
-      dueAt: true,
-      createdAt: true,
-      assignee: {
-        select: { id: true, name: true, email: true },
-      },
-    },
+    select: taskDetailSelect,
   });
 
   return { items, totalCount, page, pageCount };

@@ -50,6 +50,33 @@ export class MaterialOperationError extends Error {
   }
 }
 
+/** @satisfies {import("../generated/prisma/client").Prisma.MaterialSelect} */
+const materialDetailSelect = {
+  id: true,
+  title: true,
+  description: true,
+  originalFileName: true,
+  contentType: true,
+  sizeBytes: true,
+  createdAt: true,
+  updatedAt: true,
+  uploaderId: true,
+  uploader: { select: { name: true, email: true } },
+};
+
+/**
+ * Labへの所属を確認した後、指定された項目を同じLabから取得する。
+ * @param {PrismaClient} db
+ * @param {string} labId
+ * @param {string} materialId
+ */
+export function findMaterialForLab(db, labId, materialId) {
+  return db.material.findFirst({
+    where: { id: materialId, labId },
+    select: materialDetailSelect,
+  });
+}
+
 /**
  * 対象Labの資料を絞り込み、新しい順に1ページ分取得する。
  * @param {PrismaClient} db
@@ -79,18 +106,7 @@ export async function listLabMaterials(db, input) {
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * LIST_PAGE_SIZE,
     take: LIST_PAGE_SIZE,
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      originalFileName: true,
-      contentType: true,
-      sizeBytes: true,
-      createdAt: true,
-      updatedAt: true,
-      uploaderId: true,
-      uploader: { select: { name: true, email: true } },
-    },
+    select: materialDetailSelect,
   });
 
   return { items, totalCount, page, pageCount };

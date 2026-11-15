@@ -6,7 +6,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { AuthorizationError, requireLabMember } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
-import { canManageMaterial, listLabMaterials } from "@/lib/material-core.js";
+import { canManageMaterial, findMaterialForLab, listLabMaterials } from "@/lib/material-core.js";
 import { getLabStorageUsage } from "@/lib/storage-quota-core.js";
 import {
   buildListPageHref,
@@ -58,13 +58,18 @@ export default async function MaterialsPage({
     uploader: parseMaterialUploader(rawSearchParams.uploader, labMembers.map((member) => member.userId)),
     page: parseListPage(rawSearchParams.page),
   };
-  const materials = await listLabMaterials(prisma, {
-    labId: access.labId,
-    query: filters.query,
-    type: filters.type || undefined,
-    uploaderId: filters.uploader || undefined,
-    page: filters.page,
-  });
+  const selection = parseListSelection(rawSearchParams.materialId);
+  const fromHome = rawSearchParams.from === "home" && selection !== null;
+  const [materials, homeMaterial] = await Promise.all([
+    listLabMaterials(prisma, {
+      labId: access.labId,
+      query: filters.query,
+      type: filters.type || undefined,
+      uploaderId: filters.uploader || undefined,
+      page: filters.page,
+    }),
+    fromHome && selection ? findMaterialForLab(prisma, access.labId, selection) : null,
+  ]);
   const uploadBlocked = storageUsage.state.full || storageUsage.globalState.full;
   const uploadBlockedMessage = storageUsage.state.full
     ? "この研究室の保存容量に達したため、資料を追加できません。不要な資料を削除するか、管理者に割当変更を依頼してください。"
@@ -76,8 +81,7 @@ export default async function MaterialsPage({
   const hasActiveFilters = Boolean(filters.query || filters.type || filters.uploader);
   const clearHref = materialsPath;
 
-  const selection = parseListSelection(rawSearchParams.materialId);
-  const selectedMaterial = materials.items.find((material) => material.id === selection);
+  const selectedMaterial = fromHome ? homeMaterial : materials.items.find((material) => material.id === selection);
   const lab = selectedMaterial
     ? await prisma.lab.findUnique({ where: { id: access.labId }, select: { ownerId: true } })
     : null;
@@ -122,6 +126,7 @@ export default async function MaterialsPage({
         selection={selection}
         hasDetail={Boolean(selectedMaterial)}
         listHref={listHref}
+        backLink={fromHome ? { href: "/labs", label: "ホームへ戻る" } : undefined}
         detail={selectedMaterial ? <MaterialDetail key={selectedMaterial.id} labId={access.labId} material={selectedMaterial} canManage={canManage} /> : null}
         list={(
           <Card aria-labelledby="materials-list-heading" className="p-4 sm:p-6">

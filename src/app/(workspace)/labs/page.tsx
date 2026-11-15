@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import {
@@ -7,9 +8,12 @@ import {
 } from "@/lib/authorization";
 import { getMissingAuthEnvironmentVariables } from "@/lib/auth-environment.js";
 import { prisma } from "@/lib/db";
+import { buildListPageHref } from "@/lib/list-query.js";
 import { getLabCreationCapacity } from "@/lib/storage-quota-core.js";
 import { ButtonLink, Card, EmptyState, PageHeader, TaskStatusBadge } from "@/components/ui";
 import { AddMemberForm, RemoveMemberForm } from "./member-management";
+
+const detailLinkClassName = "rounded-sm text-sm font-semibold text-indigo-800 underline decoration-indigo-300 underline-offset-4 hover:text-indigo-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 [overflow-wrap:anywhere]";
 
 export default async function LabsPage() {
   if (getMissingAuthEnvironmentVariables().includes("AUTH_SECRET")) {
@@ -150,7 +154,9 @@ export default async function LabsPage() {
               {myTasks.map((task) => (
                 <li className="flex min-w-0 items-start justify-between gap-3 py-3" key={task.id}>
                   <div className="min-w-0">
-                    <p className="break-words text-sm font-semibold text-slate-900">{task.title}</p>
+                    <Link className={detailLinkClassName} href={buildListPageHref(tasksHref, { taskId: task.id, from: "home" })} prefetch={false}>
+                      {task.title}
+                    </Link>
                     <p className={`mt-1 text-xs ${task.dueAt && task.dueAt < now ? "font-semibold text-rose-700" : "text-slate-500"}`}>{task.dueAt ? `締切 ${formatTokyoDate(task.dueAt)}${task.dueAt < now ? " · 期限超過" : ""}` : "締切未設定"}</p>
                   </div>
                   <TaskStatusBadge status={task.status} />
@@ -175,7 +181,9 @@ export default async function LabsPage() {
               {upcomingTasks.map((task) => (
                 <li className="flex min-w-0 items-start justify-between gap-3 py-3" key={task.id}>
                   <div className="min-w-0">
-                    <p className="break-words text-sm font-semibold text-slate-900">{task.title}</p>
+                    <Link className={detailLinkClassName} href={buildListPageHref(tasksHref, { taskId: task.id, from: "home" })} prefetch={false}>
+                      {task.title}
+                    </Link>
                     <p className={`mt-1 text-xs ${task.dueAt && task.dueAt < now ? "font-semibold text-rose-700" : "text-slate-500"}`}>{task.assignee?.name?.trim() || task.assignee?.email || "担当者なし"} · 締切 {task.dueAt ? `${formatTokyoDate(task.dueAt)}${task.dueAt < now ? " · 期限超過" : ""}` : "未設定"}</p>
                   </div>
                   <TaskStatusBadge status={task.status} />
@@ -199,7 +207,9 @@ export default async function LabsPage() {
             <ul className="mt-3 grid gap-3 sm:grid-cols-2">
               {recentMaterials.map((material) => (
                 <li className="min-w-0 rounded-xl border border-slate-200 bg-slate-50/70 p-3" key={material.id}>
-                  <p className="break-words text-sm font-semibold text-slate-900">{material.title}</p>
+                  <Link className={detailLinkClassName} href={buildListPageHref(materialsHref, { materialId: material.id, from: "home" })} prefetch={false}>
+                    {material.title}
+                  </Link>
                   <p className="mt-1 line-clamp-2 break-words text-sm text-slate-600">{material.description || getMaterialTypeLabel(material.contentType)}</p>
                   <p className="mt-2 text-xs text-slate-500">{material.uploader?.name?.trim() || material.uploader?.email || "登録者不明"} · {formatTokyoDate(material.createdAt)}</p>
                 </li>
