@@ -1,3 +1,4 @@
+import { lockLabMembership } from "./lab-member-lock.js";
 import { LIST_PAGE_SIZE } from "./list-query.js";
 
 /**
@@ -23,15 +24,10 @@ import { LIST_PAGE_SIZE } from "./list-query.js";
  *   task: {
  *     deleteMany: (args: { where: { id: string, labId: string } }) => Promise<{ count: number }>
  *   },
- *   $transaction: <T>(callback: (tx: TaskTransaction) => Promise<T>) => Promise<T>
+ *   $transaction: <T>(callback: (tx: TaskTransaction) => Promise<T>, options?: { isolationLevel: "ReadCommitted" }) => Promise<T>
  * }} TaskDatabase
  * @typedef {{
- *   labMember: {
- *     findUnique: (args: {
- *       where: { labId_userId: { labId: string, userId: string } },
- *       select: { userId: true }
- *     }) => Promise<{ userId: string } | null>
- *   },
+ *   $queryRaw: import("../generated/prisma/client").Prisma.TransactionClient["$queryRaw"],
  *   task: {
  *     create: (args: { data: TaskData & { labId: string }, select: { id: true } }) => Promise<{ id: string }>,
  *     findFirst: (args: {
@@ -136,7 +132,7 @@ export function createTask(db, labId, data) {
       data: { ...data, labId },
       select: { id: true },
     });
-  });
+  }, { isolationLevel: "ReadCommitted" });
 }
 
 /**
@@ -171,7 +167,7 @@ export function updateTask(db, labId, taskId, data) {
     }
 
     return { id: taskId };
-  });
+  }, { isolationLevel: "ReadCommitted" });
 }
 
 /**
@@ -221,12 +217,7 @@ async function requireAssigneeMembership(tx, labId, assigneeId) {
     return;
   }
 
-  const membership = await tx.labMember.findUnique({
-    where: { labId_userId: { labId, userId: assigneeId } },
-    select: { userId: true },
-  });
-
-  if (!membership) {
+  if (!(await lockLabMembership(tx, labId, assigneeId))) {
     throw new TaskOperationError("ASSIGNEE_NOT_MEMBER");
   }
 }

@@ -19,17 +19,12 @@ function createFakeDatabase({ memberships = [], tasks = [] } = {}) {
 
   function createTransactionDatabase(pendingTasks) {
     return {
-      labMember: {
-        async findUnique(args) {
-          calls.push(["labMember.findUnique", args]);
-          const { labId, userId } = args.where.labId_userId;
-          return (
-            state.memberships.find(
-              (membership) =>
-                membership.labId === labId && membership.userId === userId,
-            ) ?? null
-          );
-        },
+      async $queryRaw(query, labId, userId) {
+        assert.match(query.join("?"), /FROM "LabMember"\s+WHERE "labId" = \? AND "userId" = \?\s+FOR UPDATE/);
+        calls.push(["membership.lock", { labId, userId }]);
+        return state.memberships.filter(
+          (membership) => membership.labId === labId && membership.userId === userId,
+        );
       },
       task: {
         async create(args) {
@@ -92,8 +87,8 @@ function createFakeDatabase({ memberships = [], tasks = [] } = {}) {
         return { count: before - state.tasks.length };
       },
     },
-    async $transaction(callback) {
-      calls.push(["transaction"]);
+    async $transaction(callback, options) {
+      calls.push(["transaction", options]);
       const pendingTasks = structuredClone(state.tasks);
       const result = await callback(createTransactionDatabase(pendingTasks));
       state.tasks = pendingTasks;
@@ -302,7 +297,7 @@ test("creates a Task with no assignee", async () => {
       ...taskInput,
     },
   ]);
-  assert.equal(calls.filter(([name]) => name === "transaction").length, 1);
+  assert.deepEqual(calls.map(([name]) => name), ["transaction", "task.create"]);
 });
 
 test("creates a Task assigned to a member of the same Lab", async () => {
@@ -313,14 +308,11 @@ test("creates a Task assigned to a member of the same Lab", async () => {
   await createTask(db, "lab-1", { ...taskInput, assigneeId: "member-1" });
 
   assert.equal(state.tasks[0].assigneeId, "member-1");
-  assert.ok(
-    calls.some(
-      ([name, args]) =>
-        name === "labMember.findUnique" &&
-        args.where.labId_userId.labId === "lab-1" &&
-        args.where.labId_userId.userId === "member-1",
-    ),
-  );
+  assert.deepEqual(calls.slice(0, 2), [
+    ["transaction", { isolationLevel: "ReadCommitted" }],
+    ["membership.lock", { labId: "lab-1", userId: "member-1" }],
+  ]);
+  assert.equal(calls[2][0], "task.create");
 });
 
 test("rejects an assignee who belongs to another Lab", async () => {
@@ -357,6 +349,21 @@ test("updates a Task only when both its id and Lab match", async () => {
         args.where.labId === "lab-1",
     ),
   );
+});
+
+test("locks the assignee membership before updating a Task", async () => {
+  const { db, state, calls } = createFakeDatabase({
+    tasks: [{ id: "task-1", labId: "lab-1", ...taskInput }],
+    memberships: [{ labId: "lab-1", userId: "member-1" }],
+  });
+
+  await updateTask(db, "lab-1", "task-1", { ...taskInput, assigneeId: "member-1" });
+
+  assert.equal(state.tasks[0].assigneeId, "member-1");
+  assert.deepEqual(calls[0], ["transaction", { isolationLevel: "ReadCommitted" }]);
+  const lockIndex = calls.findIndex(([name]) => name === "membership.lock");
+  assert.deepEqual(calls[lockIndex], ["membership.lock", { labId: "lab-1", userId: "member-1" }]);
+  assert.ok(lockIndex < calls.findIndex(([name]) => name === "task.updateMany"));
 });
 
 test("does not update a Task from a different Lab", async () => {

@@ -1,3 +1,5 @@
+import { lockLabMembership } from "./lab-member-lock.js";
+
 /**
  * @typedef {"USER_NOT_FOUND" | "CANNOT_ADD_SELF" | "ALREADY_MEMBER" | "ALREADY_ASSIGNED" | "CANNOT_REMOVE_OWNER" | "NOT_MEMBER"} MemberManagementErrorCode
  * @typedef {{
@@ -7,9 +9,10 @@
  *       select: { id: true }
  *     }) => Promise<{ id: string } | null>
  *   },
- *   $transaction: <T>(callback: (tx: MemberManagementTransaction) => Promise<T>) => Promise<T>
+ *   $transaction: <T>(callback: (tx: MemberManagementTransaction) => Promise<T>, options?: { isolationLevel: "ReadCommitted" }) => Promise<T>
  * }} MemberManagementDatabase
  * @typedef {{
+ *   $queryRaw: import("../generated/prisma/client").Prisma.TransactionClient["$queryRaw"],
  *   labMember: {
  *     findUnique: (args: {
  *       where:
@@ -126,12 +129,7 @@ export async function removeMemberAndClearAssignments(
 
   try {
     return await db.$transaction(async (tx) => {
-      const membership = await tx.labMember.findUnique({
-        where: { labId_userId: { labId, userId } },
-        select: { userId: true },
-      });
-
-      if (!membership) {
+      if (!(await lockLabMembership(tx, labId, userId))) {
         throw new MemberManagementError("NOT_MEMBER");
       }
 
@@ -145,7 +143,7 @@ export async function removeMemberAndClearAssignments(
       });
 
       return { clearedAssignments: clearedAssignments.count };
-    });
+    }, { isolationLevel: "ReadCommitted" });
   } catch (error) {
     if (error instanceof MemberManagementError) {
       throw error;

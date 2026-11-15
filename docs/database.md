@@ -156,7 +156,7 @@ DB制約とアプリ側処理の境界:
 | `Material.uploaderId` → `User.id` | `SetNull` | 登録者Userが削除されてもMaterialと外部ファイルを保持する。 |
 | Auth.js `Account.userId` / `Session.userId` → `User.id` | `Cascade` | User削除時にOAuth連携・セッションを残さない。 |
 
-TaskからLabMemberへの外部キーは設けず、Taskの担当者はUserを参照する。したがってDB外部キーだけでは「担当者が当該Labのメンバーであること」までは表現しない。タスク作成・更新時に、サーバーが `LabMember(labId, assigneeId)` を照会して保証する。これは単純なMVPモデルを保ちつつ、認可ルールをすべての更新処理で明示する設計。
+TaskからLabMemberへの外部キーは設けず、Taskの担当者はUserを参照する。したがってDB外部キーだけでは「担当者が当該Labのメンバーであること」までは表現しない。担当者付きのタスク作成・更新とメンバー削除では、対象の `LabMember(labId, userId)` を `SELECT … FOR UPDATE` でロックしてからタスクを書き換える。`ReadCommitted` のトランザクションで、保存が先なら後続のメンバー削除がそのタスクも担当解除し、削除が先なら後続の保存は所属行がないため拒否する。
 
 Labメンバーを外す操作は、次を1つのDBトランザクションで行う。
 

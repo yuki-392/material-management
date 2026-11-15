@@ -32,13 +32,20 @@ function createFakeDatabase({
         );
       },
     },
-    async $transaction(callback) {
-      calls.push(["transaction"]);
+    async $transaction(callback, options) {
+      calls.push(["transaction", options]);
       const pending = {
         memberships: structuredClone(state.memberships),
         tasks: structuredClone(state.tasks),
       };
       const tx = {
+        async $queryRaw(query, labId, userId) {
+          assert.match(query.join("?"), /FROM "LabMember"\s+WHERE "labId" = \? AND "userId" = \?\s+FOR UPDATE/);
+          calls.push(["membership.lock", { labId, userId }]);
+          return pending.memberships.filter(
+            (membership) => membership.labId === labId && membership.userId === userId,
+          );
+        },
         labMember: {
           async findUnique(args) {
             calls.push(["labMember.findUnique", args]);
@@ -280,14 +287,15 @@ test("removes membership and clears only tasks assigned in that Lab", async () =
     { id: "task-2", labId: "lab-1", assigneeId: "other-user" },
     { id: "task-3", labId: "lab-2", assigneeId: "user-new" },
   ]);
-  assert.ok(
-    calls.findIndex(([name]) => name === "task.updateMany") <
-      calls.findIndex(([name]) => name === "labMember.delete"),
-  );
+  assert.deepEqual(calls.slice(0, 2), [
+    ["transaction", { isolationLevel: "ReadCommitted" }],
+    ["membership.lock", { labId: "lab-1", userId: "user-new" }],
+  ]);
+  assert.deepEqual(calls.slice(2).map(([name]) => name), ["task.updateMany", "labMember.delete"]);
 });
 
 test("cannot remove the owner", async () => {
-  const { db, state } = createFakeDatabase({
+  const { db, state, calls } = createFakeDatabase({
     memberships: [{ labId: "lab-1", userId: "owner-1" }],
   });
 
@@ -299,6 +307,7 @@ test("cannot remove the owner", async () => {
     }),
     expectMemberError("CANNOT_REMOVE_OWNER"),
   );
+  assert.deepEqual(calls, []);
   assert.deepEqual(state.memberships, [{ labId: "lab-1", userId: "owner-1" }]);
 });
 
