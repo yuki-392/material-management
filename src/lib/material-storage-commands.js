@@ -1,5 +1,7 @@
 import {
   CreateBucketCommand,
+  GetObjectCommand,
+  NoSuchKey,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 
@@ -56,4 +58,19 @@ export async function putMaterialObject(s3, input) {
       ContentLength: input.sizeBytes,
     }),
   );
+}
+
+/**
+ * @param {S3Client} s3
+ * @param {string} bucket
+ * @param {string} key
+ */
+export async function getMaterialObject(s3, bucket, key) {
+  try {
+    const result = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    return { body: result.Body?.transformToWebStream() ?? null };
+  } catch (error) {
+    if (error instanceof NoSuchKey) return { body: null };
+    throw error;
+  }
 }

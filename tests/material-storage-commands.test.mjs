@@ -3,10 +3,13 @@ import test from "node:test";
 
 import {
   CreateBucketCommand,
+  GetObjectCommand,
+  NoSuchKey,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import {
   ensureMaterialBucket,
+  getMaterialObject,
   putMaterialObject,
 } from "../src/lib/material-storage-commands.js";
 
@@ -59,4 +62,23 @@ test("does not hide local bucket setup failures other than an existing bucket", 
     ensureMaterialBucket(client, "lab-materials"),
     (error) => error === accessDenied,
   );
+});
+
+test("converts an S3 missing-key error to a missing body", async () => {
+  const client = {
+    async send(command) {
+      assert.ok(command instanceof GetObjectCommand);
+      assert.deepEqual(command.input, { Bucket: "lab-materials", Key: "old-key" });
+      throw new NoSuchKey({ $metadata: { httpStatusCode: 404 }, message: "gone" });
+    },
+  };
+  assert.deepEqual(await getMaterialObject(client, "lab-materials", "old-key"), { body: null });
+});
+
+test("preserves storage errors other than NoSuchKey", async () => {
+  for (const [name, status] of [["AccessDenied", 403], ["NoSuchBucket", 404], ["TimeoutError", undefined]]) {
+    const failure = Object.assign(new Error(name), { name, $metadata: { httpStatusCode: status } });
+    const client = { async send() { throw failure; } };
+    await assert.rejects(getMaterialObject(client, "lab-materials", "old-key"), (error) => error === failure);
+  }
 });

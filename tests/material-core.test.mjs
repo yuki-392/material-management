@@ -424,20 +424,20 @@ test("logs safe context when upload compensation fails", async () => {
 });
 
 test("looks up a file using both Material id and Lab id, then fetches the DB key", async () => {
-  let query;
-  let fetchedKey;
+  const queries = [];
+  const fetchedKeys = [];
   const expectedBody = new Uint8Array([37, 80, 68, 70]);
   const db = {
     material: {
       findFirst: async (args) => {
-        query = args;
+        queries.push(args.where);
         return materialRow();
       },
     },
   };
   const storage = {
     getObject: async (key) => {
-      fetchedKey = key;
+      fetchedKeys.push(key);
       return { body: expectedBody };
     },
   };
@@ -447,8 +447,8 @@ test("looks up a file using both Material id and Lab id, then fetches the DB key
     materialId: "material-1",
   });
 
-  assert.deepEqual(query.where, { id: "material-1", labId: "lab-1" });
-  assert.equal(fetchedKey, "labs/lab-1/materials/key-1");
+  assert.deepEqual(queries, [{ id: "material-1", labId: "lab-1" }]);
+  assert.deepEqual(fetchedKeys, ["labs/lab-1/materials/key-1"]);
   assert.equal(result.body, expectedBody);
 });
 
@@ -465,6 +465,78 @@ test("does not request storage when the Material is absent from the requested La
     (error) => error instanceof MaterialOperationError && error.code === "NOT_FOUND",
   );
   assert.equal(storageCalled, false);
+});
+
+const fileLookup = { labId: "lab-1", materialId: "material-1" };
+
+function createFileReads(rows, bodies) {
+  const reads = [];
+  const keys = [];
+  const db = {
+    material: {
+      async findFirst({ where }) {
+        reads.push(where);
+        assert.ok(rows.length > 0, "unexpected extra database lookup");
+        return rows.shift();
+      },
+    },
+  };
+  const storage = {
+    async getObject(key) {
+      keys.push(key);
+      assert.ok(bodies.length > 0, "unexpected extra storage lookup");
+      const body = bodies.shift();
+      if (body instanceof Error) throw body;
+      return { body };
+    },
+  };
+  return { reads, keys, db, storage };
+}
+
+test("retries a missing old key and responds with the replacement file and its metadata", async () => {
+  const old = materialRow();
+  const body = new Uint8Array([1, 2, 3]);
+  const replacement = materialRow({
+    storageKey: "replacement-key",
+    originalFileName: "seminar.docx",
+    contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    sizeBytes: body.byteLength,
+  });
+  const { reads, keys, db, storage } = createFileReads([old, replacement], [null, body]);
+
+  const file = await getMaterialFile(db, storage, fileLookup);
+  const response = createMaterialFileResponse(file.material, file.body);
+
+  assert.deepEqual(reads, Array(2).fill({ id: fileLookup.materialId, labId: fileLookup.labId }));
+  assert.deepEqual(keys, [old.storageKey, replacement.storageKey]);
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), body);
+  assert.equal(response.headers.get("content-type"), replacement.contentType);
+  assert.equal(response.headers.get("content-length"), String(body.byteLength));
+  assert.match(response.headers.get("content-disposition"), /^attachment;.*seminar\.docx/);
+});
+
+for (const scenario of [
+  { label: "the row was deleted", current: null, code: "NOT_FOUND", keys: 1 },
+  { label: "the key is unchanged", current: materialRow(), code: "STORAGE_OBJECT_MISSING", keys: 1 },
+  { label: "the replacement is also missing", current: materialRow({ storageKey: "replacement-key" }), code: "STORAGE_OBJECT_MISSING", keys: 2 },
+]) {
+  test(`stops retrieving a missing file when ${scenario.label}`, async () => {
+    const { reads, keys, db, storage } = createFileReads([materialRow(), scenario.current], [null, null]);
+
+    await assert.rejects(getMaterialFile(db, storage, fileLookup), { code: scenario.code });
+
+    assert.equal(reads.length, 2);
+    assert.equal(keys.length, scenario.keys);
+  });
+}
+
+test("a storage failure does not trigger a fresh lookup", async () => {
+  const failure = new Error("storage offline");
+  const { reads, keys, db, storage } = createFileReads([materialRow()], [failure]);
+
+  await assert.rejects(getMaterialFile(db, storage, fileLookup), (error) => error === failure);
+  assert.equal(reads.length, 1);
+  assert.equal(keys.length, 1);
 });
 
 test("locks the row and deletes the object before removing Lab-scoped metadata", async () => {

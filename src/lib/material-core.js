@@ -210,7 +210,7 @@ async function releaseReservationSafely(release, db, reservationId, stage = "mat
  * @param {{labId: string, materialId: string}} input
  */
 export async function getMaterialFile(db, storage, { labId, materialId }) {
-  const material = await db.material.findFirst({
+  const findMaterial = () => db.material.findFirst({
     where: { id: materialId, labId },
     select: {
       id: true,
@@ -222,16 +222,24 @@ export async function getMaterialFile(db, storage, { labId, materialId }) {
     },
   });
 
-  if (!material) {
-    throw new MaterialOperationError("NOT_FOUND");
-  }
+  const material = await findMaterial();
+  if (!material) throw new MaterialOperationError("NOT_FOUND");
 
   const object = await storage.getObject(material.storageKey);
-  if (!object?.body) {
+  if (object?.body) return { material, body: object.body };
+
+  // A replacement can remove the old object after the first database read.
+  const current = await findMaterial();
+  if (!current) throw new MaterialOperationError("NOT_FOUND");
+  if (current.storageKey === material.storageKey) {
     throw new MaterialOperationError("STORAGE_OBJECT_MISSING");
   }
 
-  return { material, body: object.body };
+  const replacement = await storage.getObject(current.storageKey);
+  if (!replacement?.body) {
+    throw new MaterialOperationError("STORAGE_OBJECT_MISSING");
+  }
+  return { material: current, body: replacement.body };
 }
 
 /** @param {string} userId @param {string | null} uploaderId @param {string} ownerId */

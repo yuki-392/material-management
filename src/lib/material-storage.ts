@@ -2,10 +2,9 @@ import "server-only";
 
 import {
   DeleteObjectCommand,
-  GetObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { putMaterialObject as putMaterialS3Object } from "./material-storage-commands.js";
+import { getMaterialObject as getMaterialS3Object, putMaterialObject as putMaterialS3Object } from "./material-storage-commands.js";
 
 type StorageConfig = {
   endpoint: string;
@@ -94,13 +93,7 @@ export async function putMaterialObject({
 
 export async function getMaterialObject(key: string) {
   const config = getStorageConfig();
-  const result = await getS3Client(config).send(
-    new GetObjectCommand({ Bucket: config.bucket, Key: key }),
-  );
-
-  return {
-    body: result.Body?.transformToWebStream() ?? null,
-  };
+  return getMaterialS3Object(getS3Client(config), config.bucket, key);
 }
 
 export async function deleteMaterialObject(key: string) {
