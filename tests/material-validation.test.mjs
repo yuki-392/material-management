@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   MAX_MATERIAL_FILE_SIZE,
   validateMaterialInput,
+  validateMaterialEditInput,
 } from "../src/lib/material-validation.js";
 
 function validFile(overrides = {}) {
@@ -100,4 +101,23 @@ test("rejects path-only and overlong file names", () => {
 
   assert.ok(pathOnly.fieldErrors.file);
   assert.ok(longName.fieldErrors.file);
+});
+
+test("an edit can clear the description without choosing a file", () => {
+  assert.deepEqual(validateMaterialEditInput({ title: "  改訂版  ", description: "  ", file: null }), {
+    success: true,
+    data: { title: "改訂版", description: null, file: null },
+  });
+  assert.equal(validateMaterialEditInput({ title: "改訂版", description: "", file: "bad" }).success, false);
+});
+
+test("a replacement applies the same size and format limits as a new upload", () => {
+  assert.equal(validateMaterialEditInput(validInput({ file: validFile({ size: MAX_MATERIAL_FILE_SIZE }) })).success, true);
+  for (const file of [
+    validFile({ size: 0 }),
+    validFile({ size: MAX_MATERIAL_FILE_SIZE + 1 }),
+    validFile({ type: "text/plain" }),
+  ]) {
+    assert.ok(validateMaterialEditInput(validInput({ file })).fieldErrors.file);
+  }
 });

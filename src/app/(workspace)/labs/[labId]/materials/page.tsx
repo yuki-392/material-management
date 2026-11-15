@@ -6,7 +6,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { AuthorizationError, requireLabMember } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
-import { listLabMaterials } from "@/lib/material-core.js";
+import { canManageMaterial, listLabMaterials } from "@/lib/material-core.js";
 import { getLabStorageUsage } from "@/lib/storage-quota-core.js";
 import {
   buildListPageHref,
@@ -18,7 +18,7 @@ import {
   parseMaterialUploader,
 } from "@/lib/list-query.js";
 import { Button, ButtonLink, Card, controlClassName, EmptyState, PageHeader, getButtonClassName, itemLinkClassName } from "@/components/ui";
-import { MaterialUploadForm, DeleteMaterialForm } from "./material-forms";
+import { MaterialUploadForm, DeleteMaterialForm, EditMaterialForm } from "./material-forms";
 
 type MaterialItem = Awaited<ReturnType<typeof listLabMaterials>>["items"][number];
 
@@ -78,6 +78,10 @@ export default async function MaterialsPage({
 
   const selection = parseListSelection(rawSearchParams.materialId);
   const selectedMaterial = materials.items.find((material) => material.id === selection);
+  const lab = selectedMaterial
+    ? await prisma.lab.findUnique({ where: { id: access.labId }, select: { ownerId: true } })
+    : null;
+  const canManage = Boolean(selectedMaterial && lab && canManageMaterial(access.userId, selectedMaterial.uploaderId, lab.ownerId));
   const listQuery = { q: filters.query, type: filters.type, uploader: filters.uploader, page: materials.page };
   const listHref = buildListPageHref(materialsPath, listQuery);
   const addMaterial = (
@@ -118,7 +122,7 @@ export default async function MaterialsPage({
         selection={selection}
         hasDetail={Boolean(selectedMaterial)}
         listHref={listHref}
-        detail={selectedMaterial ? <MaterialDetail key={selectedMaterial.id} labId={access.labId} material={selectedMaterial} /> : null}
+        detail={selectedMaterial ? <MaterialDetail key={selectedMaterial.id} labId={access.labId} material={selectedMaterial} canManage={canManage} /> : null}
         list={(
           <Card aria-labelledby="materials-list-heading" className="p-4 sm:p-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
@@ -197,7 +201,7 @@ export default async function MaterialsPage({
   );
 }
 
-function MaterialDetail({ labId, material }: { labId: string; material: MaterialItem }) {
+function MaterialDetail({ labId, material, canManage }: { labId: string; material: MaterialItem; canManage: boolean }) {
   const metadata = [
     ["元のファイル名", material.originalFileName],
     ["ファイル形式", getFileTypeLabel(material.contentType)],
@@ -219,9 +223,26 @@ function MaterialDetail({ labId, material }: { labId: string; material: Material
         ))}
       </dl>
       <MaterialFileLink labId={labId} material={material} primary />
-      <div className="border-t border-slate-200 pt-4">
-        <DeleteMaterialForm labId={labId} materialId={material.id} title={material.title} />
-      </div>
+      {canManage ? (
+        <>
+          <details className="border-t border-slate-200 pt-2">
+            <summary className="min-h-11 cursor-pointer rounded-md py-3 text-sm font-semibold text-indigo-800 focus-visible:outline-2 focus-visible:outline-indigo-700">
+              資料を編集
+            </summary>
+            <EditMaterialForm
+              key={material.updatedAt.toISOString()}
+              labId={labId}
+              materialId={material.id}
+              updatedAt={material.updatedAt.toISOString()}
+              title={material.title}
+              description={material.description ?? ""}
+            />
+          </details>
+          <div className="border-t border-slate-200 pt-4">
+            <DeleteMaterialForm labId={labId} materialId={material.id} title={material.title} />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

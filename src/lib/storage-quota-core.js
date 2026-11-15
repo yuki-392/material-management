@@ -185,6 +185,27 @@ export async function commitStorageUpload(
   materialData,
   now = new Date(),
 ) {
+  return consumeStorageReservation(db, reservationId, (tx) => tx.material.create({ data: materialData }), now);
+}
+
+/**
+ * Apply the replacement and consume its growth reservation in one transaction.
+ * @param {any} db
+ * @param {string} reservationId
+ * @param {(tx: any) => Promise<void>} update
+ */
+export async function commitStorageReplacement(db, reservationId, update) {
+  await consumeStorageReservation(db, reservationId, update);
+}
+
+/**
+ * @template T
+ * @param {any} db
+ * @param {string} reservationId
+ * @param {(tx: any) => Promise<T>} update
+ * @param {Date} [now]
+ */
+async function consumeStorageReservation(db, reservationId, update, now) {
   const result = await db.$transaction(async (tx) => {
     await lockStorageControl(tx);
     const reservation = await tx.storageReservation.findUnique({
@@ -195,7 +216,7 @@ export async function commitStorageUpload(
       return { expired: true };
     }
 
-    if (reservation.expiresAt <= now) {
+    if (reservation.expiresAt <= (now ?? new Date())) {
       await tx.storageReservation.delete({ where: { id: reservationId } });
       await tx.storageQuotaControl.update({
         where: { id: STORAGE_CONTROL_ID },
@@ -204,7 +225,7 @@ export async function commitStorageUpload(
       return { expired: true };
     }
 
-    const material = await tx.material.create({ data: materialData });
+    const material = await update(tx);
     await tx.storageReservation.delete({ where: { id: reservationId } });
     await tx.storageQuotaControl.update({
       where: { id: STORAGE_CONTROL_ID },

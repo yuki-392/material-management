@@ -21,17 +21,10 @@ const allowedFilesByExtension = {
  * @typedef {{success: true, data: MaterialInput} | {success: false, fieldErrors: Partial<Record<"title" | "description" | "file", string>>}} MaterialValidationResult
  */
 
-/**
- * Validate fields submitted by the browser. This deliberately checks both the
- * extension and browser-provided MIME type; it does not inspect file bytes.
- *
- * @param {{title: unknown, description: unknown, file: unknown}} input
- * @returns {MaterialValidationResult}
- */
-export function validateMaterialInput({ title, description, file }) {
+/** @param {unknown} title @param {unknown} description */
+function validateMaterialMetadata(title, description) {
   /** @type {Partial<Record<"title" | "description" | "file", string>>} */
   const fieldErrors = {};
-
   let normalizedTitle = "";
   if (typeof title !== "string") {
     fieldErrors.title = "タイトルを入力してください。";
@@ -57,6 +50,20 @@ export function validateMaterialInput({ title, description, file }) {
       }
     }
   }
+
+  return { fieldErrors, title: normalizedTitle, description: normalizedDescription };
+}
+
+/**
+ * Validate fields submitted by the browser. This deliberately checks both the
+ * extension and browser-provided MIME type; it does not inspect file bytes.
+ *
+ * @param {{title: unknown, description: unknown, file: unknown}} input
+ * @returns {MaterialValidationResult}
+ */
+export function validateMaterialInput({ title, description, file }) {
+  const { fieldErrors, title: normalizedTitle, description: normalizedDescription } =
+    validateMaterialMetadata(title, description);
 
   let originalFileName = "";
   let contentType = "";
@@ -107,6 +114,22 @@ export function validateMaterialInput({ title, description, file }) {
       sizeBytes,
     },
   };
+}
+
+/** @param {{title: unknown, description: unknown, file: unknown}} input */
+export function validateMaterialEditInput({ title, description, file }) {
+  if (file !== null) {
+    const result = validateMaterialInput({ title, description, file });
+    if (!result.success) return result;
+    const { title: validTitle, description: validDescription, ...fileData } = result.data;
+    return { success: /** @type {const} */ (true), data: { title: validTitle, description: validDescription, file: fileData } };
+  }
+
+  const { fieldErrors, ...metadata } = validateMaterialMetadata(title, description);
+  if (Object.keys(fieldErrors).length > 0) {
+    return { success: /** @type {const} */ (false), fieldErrors };
+  }
+  return { success: /** @type {const} */ (true), data: { ...metadata, file: null } };
 }
 
 /** @param {unknown} value */

@@ -4,6 +4,7 @@ import { LIST_PAGE_SIZE } from "./list-query.js";
 import {
   StorageQuotaError,
   commitStorageUpload,
+  commitStorageReplacement,
   releaseStorageUpload,
   reserveStorageUpload,
 } from "./storage-quota-core.js";
@@ -39,7 +40,7 @@ const materialTypeContentTypes = {
 
 export class MaterialOperationError extends Error {
   /**
-   * @param {"NOT_FOUND" | "STORAGE_CONFIGURATION_FAILED" | "STORAGE_UPLOAD_FAILED" | "METADATA_CREATE_FAILED" | "STORAGE_DELETE_FAILED" | "STORAGE_OBJECT_MISSING" | "QUOTA_RESERVATION_FAILED"} code
+   * @param {"NOT_FOUND" | "CONFLICT" | "STORAGE_CONFIGURATION_FAILED" | "STORAGE_UPLOAD_FAILED" | "METADATA_CREATE_FAILED" | "STORAGE_DELETE_FAILED" | "STORAGE_OBJECT_MISSING" | "QUOTA_RESERVATION_FAILED"} code
    * @param {unknown} [cause]
    */
   constructor(code, cause) {
@@ -86,6 +87,8 @@ export async function listLabMaterials(db, input) {
       contentType: true,
       sizeBytes: true,
       createdAt: true,
+      updatedAt: true,
+      uploaderId: true,
       uploader: { select: { name: true, email: true } },
     },
   });
@@ -176,12 +179,12 @@ export async function createMaterial(db, storage, input, quota = {}) {
   }
 }
 
-/** @param {typeof releaseStorageUpload} release @param {PrismaClient} db @param {string} reservationId */
-async function releaseReservationSafely(release, db, reservationId) {
+/** @param {typeof releaseStorageUpload} release @param {PrismaClient} db @param {string} reservationId @param {string} [stage] */
+async function releaseReservationSafely(release, db, reservationId, stage = "material.upload.reservation-release") {
   try {
     await release(db, reservationId);
   } catch (error) {
-    logMaterialError("material.upload.reservation-release", error);
+    logMaterialError(stage, error);
   }
 }
 
@@ -217,36 +220,151 @@ export async function getMaterialFile(db, storage, { labId, materialId }) {
   return { material, body: object.body };
 }
 
-/**
- * Delete the external object before removing its metadata. A failed object
- * deletion leaves the database row available for a later retry.
- * @param {PrismaClient} db
- * @param {{deleteObject: (key: string) => Promise<void>}} storage
- * @param {{labId: string, materialId: string}} input
- */
-export async function deleteMaterial(db, storage, { labId, materialId }) {
+/** @param {string} userId @param {string | null} uploaderId @param {string} ownerId */
+export function canManageMaterial(userId, uploaderId, ownerId) {
+  return userId === ownerId || userId === uploaderId;
+}
+
+/** @typedef {Pick<PrismaClient, "material">} MaterialReader */
+/** @typedef {{labId: string, materialId: string, userId: string}} MaterialAccess */
+/** @typedef {{originalFileName: string, contentType: string, sizeBytes: number, body: Uint8Array}} ReplacementFile */
+/** @typedef {{putObject: (file: Omit<ReplacementFile, "originalFileName"> & {key: string}) => Promise<void>, deleteObject: (key: string) => Promise<void>}} MaterialWriter */
+
+/** @param {MaterialReader} db @param {MaterialAccess} input */
+async function requireManagedMaterial(db, { labId, materialId, userId }) {
   const material = await db.material.findFirst({
     where: { id: materialId, labId },
-    select: { id: true, storageKey: true },
+    select: {
+      id: true,
+      storageKey: true,
+      sizeBytes: true,
+      updatedAt: true,
+      uploaderId: true,
+      lab: { select: { ownerId: true } },
+    },
   });
-
-  if (!material) {
+  if (!material || !canManageMaterial(userId, material.uploaderId, material.lab.ownerId)) {
     throw new MaterialOperationError("NOT_FOUND");
   }
+  return material;
+}
+
+/**
+ * @param {PrismaClient} db
+ * @param {MaterialWriter} storage
+ * @param {MaterialAccess & {updatedAt: Date, title: string, description: string | null, file: ReplacementFile | null}} input
+ * @param {{reserve?: typeof reserveStorageUpload, commit?: typeof commitStorageReplacement, release?: typeof releaseStorageUpload}} quota
+ */
+export async function updateMaterial(db, storage, input, quota = {}) {
+  const material = await requireManagedMaterial(db, input);
+  if (material.updatedAt.getTime() !== input.updatedAt.getTime()) {
+    throw new MaterialOperationError("CONFLICT");
+  }
+
+  const where = {
+    id: input.materialId,
+    labId: input.labId,
+    storageKey: material.storageKey,
+    updatedAt: material.updatedAt,
+  };
+  /** @type {import("@/generated/prisma/client").Prisma.MaterialUpdateManyMutationInput} */
+  const metadata = {
+    title: input.title,
+    description: input.description,
+    updatedAt: new Date(Math.max(Date.now(), material.updatedAt.getTime() + 1)),
+  };
+
+  if (!input.file) {
+    await updateMaterialIfCurrent(db, where, metadata);
+    return;
+  }
+
+  const { body, contentType, originalFileName, sizeBytes } = input.file;
+  const growth = sizeBytes - material.sizeBytes;
+  const reservationId = growth > 0
+    ? await (quota.reserve ?? reserveStorageUpload)(db, { labId: input.labId, sizeBytes: growth })
+    : null;
+  const newKey = `labs/${input.labId}/materials/${randomUUID()}`;
+  let storageSaved = false;
 
   try {
-    await storage.deleteObject(material.storageKey);
-  } catch {
-    throw new MaterialOperationError("STORAGE_DELETE_FAILED");
+    await storage.putObject({ key: newKey, body, contentType, sizeBytes });
+    storageSaved = true;
+    /** @param {MaterialReader} tx */
+    const update = (tx) => updateMaterialIfCurrent(tx, where, {
+      ...metadata, storageKey: newKey, contentType, originalFileName, sizeBytes,
+    });
+
+    if (reservationId) {
+      await (quota.commit ?? commitStorageReplacement)(db, reservationId, update);
+    } else {
+      await update(db);
+    }
+  } catch (error) {
+    // A lost commit response can leave the new file live. Verify before cleanup.
+    let committed = false;
+    try {
+      committed = storageSaved && Boolean(await db.material.findUnique({
+        where: { storageKey: newKey },
+        select: { id: true },
+      }));
+      if (!committed) await deleteReplacementObject(storage, newKey, "material.replace.compensation-delete");
+    } catch (lookupError) {
+      logMaterialError("material.replace.commit-check", lookupError);
+    }
+    if (reservationId) {
+      await releaseReservationSafely(quota.release ?? releaseStorageUpload, db, reservationId, "material.replace.reservation-release");
+    }
+    if (!committed) throw error;
   }
 
-  const deleted = await db.material.deleteMany({
-    where: { id: material.id, labId },
-  });
+  await deleteReplacementObject(storage, material.storageKey, "material.replace.old-delete");
+}
 
-  if (deleted.count !== 1) {
-    throw new MaterialOperationError("NOT_FOUND");
+/**
+ * @param {MaterialReader} db
+ * @param {import("@/generated/prisma/client").Prisma.MaterialWhereInput} where
+ * @param {import("@/generated/prisma/client").Prisma.MaterialUpdateManyMutationInput} data
+ */
+async function updateMaterialIfCurrent(db, where, data) {
+  if ((await db.material.updateMany({ where, data })).count !== 1) {
+    throw new MaterialOperationError("CONFLICT");
   }
+}
+
+/** @param {Pick<MaterialWriter, "deleteObject">} storage @param {string} key @param {string} stage */
+async function deleteReplacementObject(storage, key, stage) {
+  try {
+    await storage.deleteObject(key);
+  } catch (error) {
+    logMaterialError(stage, error);
+  }
+}
+
+/**
+ * Lock the material during removal so a replacement cannot switch its key
+ * after deletion has read it but before the database row is removed.
+ * @param {PrismaClient} db
+ * @param {Pick<MaterialWriter, "deleteObject">} storage
+ * @param {MaterialAccess} input
+ */
+export async function deleteMaterial(db, storage, input) {
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT "id" FROM "Material"
+      WHERE "id" = ${input.materialId} AND "labId" = ${input.labId}
+      FOR UPDATE
+    `;
+    const material = await requireManagedMaterial(tx, input);
+
+    try {
+      await storage.deleteObject(material.storageKey);
+    } catch {
+      throw new MaterialOperationError("STORAGE_DELETE_FAILED");
+    }
+
+    await tx.material.delete({ where: { id: material.id, labId: input.labId } });
+  }, { timeout: 20_000 });
 }
 
 /**

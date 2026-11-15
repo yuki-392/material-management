@@ -11,10 +11,12 @@ import {
   MaterialOperationError,
   createMaterial,
   deleteMaterial,
+  updateMaterial,
 } from "@/lib/material-core.js";
 import {
   MAX_MATERIAL_FILE_SIZE,
   validateMaterialInput,
+  validateMaterialEditInput,
 } from "@/lib/material-validation.js";
 import {
   deleteMaterialObject,
@@ -112,6 +114,73 @@ export async function uploadMaterialAction(
   return { success: true };
 }
 
+export async function updateMaterialAction(
+  _previousState: MaterialFormState,
+  formData: FormData,
+): Promise<MaterialFormState> {
+  const labId = readString(formData.get("labId"));
+  const materialId = readString(formData.get("materialId"));
+  const revision = readString(formData.get("updatedAt"));
+  const updatedAt = new Date(revision ?? "");
+  if (!labId || !materialId || labId.length > 100 || materialId.length > 100 ||
+      !Number.isFinite(updatedAt.getTime()) || updatedAt.toISOString() !== revision) {
+    return { formError: "資料を確認できませんでした。画面を再読み込みしてください。" };
+  }
+
+  const access = await getLabMemberAccess(labId);
+  if (!access) {
+    return { formError: "このLabの資料を操作できません。画面を再読み込みしてください。" };
+  }
+
+  const file = formData.get("file");
+  // Native multipart forms submit an empty File when the picker is unused.
+  const replacement = isFileEntry(file) && file.name === "" && file.size === 0 ? null : file;
+  const validation = validateMaterialEditInput({
+    title: formData.get("title"),
+    description: formData.get("description"),
+    file: replacement,
+  });
+  if (!validation.success) return { fieldErrors: validation.fieldErrors };
+
+  try {
+    const fileData = validation.data.file && isFileEntry(replacement)
+      ? { ...validation.data.file, body: new Uint8Array(await replacement.arrayBuffer()) }
+      : null;
+    await updateMaterial(prisma, { putObject: putMaterialObject, deleteObject: deleteMaterialObject }, {
+      ...access, materialId, updatedAt,
+      title: validation.data.title,
+      description: validation.data.description,
+      file: fileData,
+    });
+  } catch (error) {
+    if (error instanceof StorageQuotaError) {
+      if (error.code === "LAB_QUOTA_EXCEEDED") {
+        return { fieldErrors: { file: "研究室の残り容量を超えています。より小さいファイルを選んでください。" } };
+      }
+      if (error.code === "GLOBAL_QUOTA_EXCEEDED") {
+        return { fieldErrors: { file: "アプリ全体の残り容量を超えています。より小さいファイルを選んでください。" } };
+      }
+      if (error.code === "RESERVATION_EXPIRED") {
+        return { formError: "保存容量の予約が切れました。ファイルを選び直して再度保存してください。" };
+      }
+    }
+    if (error instanceof MaterialOperationError) {
+      if (error.code === "NOT_FOUND") {
+        return { formError: "資料が見つからないか、編集権限がありません。" };
+      }
+      if (error.code === "CONFLICT") {
+        return { formError: "資料が更新または削除されました。画面を再読み込みして確認してください。" };
+      }
+    }
+    logMaterialError("material.update", error);
+    return { formError: "資料を保存できませんでした。画面を再読み込みして確認してください。" };
+  }
+
+  revalidatePath(getMaterialsPath(access.labId));
+  refresh();
+  return { success: true };
+}
+
 export async function deleteMaterialAction(
   _previousState: MaterialFormState,
   formData: FormData,
@@ -131,7 +200,7 @@ export async function deleteMaterialAction(
     await deleteMaterial(
       prisma,
       { deleteObject: deleteMaterialObject },
-      { labId: access.labId, materialId },
+      { ...access, materialId },
     );
   } catch (error) {
     if (error instanceof MaterialOperationError) {
@@ -142,7 +211,7 @@ export async function deleteMaterialAction(
         };
       }
 
-      return { formError: "資料を確認できませんでした。画面を再読み込みしてください。" };
+      return { formError: "資料が見つからないか、削除権限がありません。" };
     }
 
     return {

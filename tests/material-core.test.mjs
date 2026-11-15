@@ -457,63 +457,44 @@ test("does not request storage when the Material is absent from the requested La
   assert.equal(storageCalled, false);
 });
 
-test("deletes the object before deleting a Lab-scoped metadata row", async () => {
+test("locks the row and deletes the object before removing Lab-scoped metadata", async () => {
   const operations = [];
-  const db = {
+  const tx = {
+    async $queryRaw(_strings, ...values) {
+      assert.deepEqual(values, ["material-1", "lab-1"]);
+      operations.push("lock");
+    },
     material: {
-      findFirst: async ({ where }) => {
+      async findFirst({ where }) {
         assert.deepEqual(where, { id: "material-1", labId: "lab-1" });
-        return materialRow();
+        return materialRow({ lab: { ownerId: "owner" } });
       },
-      deleteMany: async ({ where }) => {
+      async delete({ where }) {
         operations.push("database-delete");
         assert.deepEqual(where, { id: "material-1", labId: "lab-1" });
-        return { count: 1 };
       },
     },
   };
+  const db = { $transaction: (callback) => callback(tx) };
   const storage = {
-    deleteObject: async (key) => {
+    async deleteObject(key) {
       operations.push("storage-delete");
       assert.equal(key, "labs/lab-1/materials/key-1");
     },
   };
+  const input = { labId: "lab-1", materialId: "material-1", userId: "owner" };
 
-  await deleteMaterial(db, storage, {
-    labId: "lab-1",
-    materialId: "material-1",
-  });
+  await deleteMaterial(db, storage, input);
+  assert.deepEqual(operations, ["lock", "storage-delete", "database-delete"]);
 
-  assert.deepEqual(operations, ["storage-delete", "database-delete"]);
-});
+  operations.length = 0;
+  await assert.rejects(deleteMaterial(db, storage, { ...input, userId: "member" }), { code: "NOT_FOUND" });
+  assert.deepEqual(operations, ["lock"]);
 
-test("keeps the DB row when object deletion fails", async () => {
-  let databaseDeleted = false;
-  const db = {
-    material: {
-      findFirst: async () => materialRow(),
-      deleteMany: async () => {
-        databaseDeleted = true;
-        return { count: 1 };
-      },
-    },
-  };
-  const storage = {
-    deleteObject: async () => {
-      throw new Error("storage unavailable");
-    },
-  };
-
-  await assert.rejects(
-    deleteMaterial(db, storage, {
-      labId: "lab-1",
-      materialId: "material-1",
-    }),
-    (error) =>
-      error instanceof MaterialOperationError &&
-      error.code === "STORAGE_DELETE_FAILED",
-  );
-  assert.equal(databaseDeleted, false);
+  operations.length = 0;
+  storage.deleteObject = async () => { throw new Error("storage unavailable"); };
+  await assert.rejects(deleteMaterial(db, storage, input), { code: "STORAGE_DELETE_FAILED" });
+  assert.deepEqual(operations, ["lock"]);
 });
 
 test("uses inline responses for PDF/images and attachment for Office files", () => {
