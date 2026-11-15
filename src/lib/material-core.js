@@ -40,7 +40,7 @@ const materialTypeContentTypes = {
 
 export class MaterialOperationError extends Error {
   /**
-   * @param {"NOT_FOUND" | "CONFLICT" | "STORAGE_CONFIGURATION_FAILED" | "STORAGE_UPLOAD_FAILED" | "METADATA_CREATE_FAILED" | "STORAGE_DELETE_FAILED" | "STORAGE_OBJECT_MISSING" | "QUOTA_RESERVATION_FAILED"} code
+   * @param {"NOT_FOUND" | "CONFLICT" | "STORAGE_CONFIGURATION_FAILED" | "STORAGE_UPLOAD_FAILED" | "METADATA_CREATE_FAILED" | "METADATA_CREATE_UNCONFIRMED" | "STORAGE_DELETE_FAILED" | "STORAGE_OBJECT_MISSING" | "QUOTA_RESERVATION_FAILED"} code
    * @param {unknown} [cause]
    */
   constructor(code, cause) {
@@ -97,8 +97,8 @@ export async function listLabMaterials(db, input) {
 }
 
 /**
- * Store the file before metadata. A failed DB insert triggers a best-effort
- * compensating delete because the database and S3 cannot share a transaction.
+ * Store the file before metadata. Delete it after a registration error only
+ * once the reservation is closed and no Material references the key.
  * @param {PrismaClient} db
  * @param {{putObject: (input: {key: string, body: Uint8Array, contentType: string, sizeBytes: number}) => Promise<void>, deleteObject: (key: string) => Promise<void>}} storage
  * @param {{labId: string, userId: string, title: string, description: string | null, originalFileName: string, contentType: string, sizeBytes: number, body: Uint8Array}} input
@@ -167,14 +167,28 @@ export async function createMaterial(db, storage, input, quota = {}) {
   } catch (error) {
     logMaterialError("material.upload.metadata-create", error);
 
+    // Release takes the same lock as commit. After it returns, this reservation
+    // cannot be used to register the file after the lookup below.
     try {
-      await storage.deleteObject(storageKey);
-    } catch (cleanupError) {
-      logMaterialError("material.upload.compensation-delete", cleanupError);
+      await release(db, reservationId);
+    } catch (releaseError) {
+      logMaterialError("material.upload.reservation-release", releaseError);
+      throw new MaterialOperationError("METADATA_CREATE_UNCONFIRMED", releaseError);
     }
 
-    await releaseReservationSafely(release, db, reservationId);
+    let material;
+    try {
+      material = await db.material.findUnique({
+        where: { storageKey, labId: input.labId },
+      });
+    } catch (lookupError) {
+      logMaterialError("material.upload.commit-check", lookupError);
+      throw new MaterialOperationError("METADATA_CREATE_UNCONFIRMED", lookupError);
+    }
 
+    if (material) return material;
+
+    await deleteUnreferencedObject(storage, storageKey, "material.upload.compensation-delete");
     throw new MaterialOperationError("METADATA_CREATE_FAILED", error);
   }
 }
@@ -308,7 +322,7 @@ export async function updateMaterial(db, storage, input, quota = {}) {
         where: { storageKey: newKey },
         select: { id: true },
       }));
-      if (!committed) await deleteReplacementObject(storage, newKey, "material.replace.compensation-delete");
+      if (!committed) await deleteUnreferencedObject(storage, newKey, "material.replace.compensation-delete");
     } catch (lookupError) {
       logMaterialError("material.replace.commit-check", lookupError);
     }
@@ -318,7 +332,7 @@ export async function updateMaterial(db, storage, input, quota = {}) {
     if (!committed) throw error;
   }
 
-  await deleteReplacementObject(storage, material.storageKey, "material.replace.old-delete");
+  await deleteUnreferencedObject(storage, material.storageKey, "material.replace.old-delete");
 }
 
 /**
@@ -333,7 +347,7 @@ async function updateMaterialIfCurrent(db, where, data) {
 }
 
 /** @param {Pick<MaterialWriter, "deleteObject">} storage @param {string} key @param {string} stage */
-async function deleteReplacementObject(storage, key, stage) {
+async function deleteUnreferencedObject(storage, key, stage) {
   try {
     await storage.deleteObject(key);
   } catch (error) {

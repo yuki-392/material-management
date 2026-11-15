@@ -101,7 +101,11 @@ export async function uploadMaterialAction(
       }
     }
 
-    if (!(error instanceof MaterialOperationError)) {
+    if (error instanceof MaterialOperationError) {
+      if (error.code === "METADATA_CREATE_UNCONFIRMED") {
+        return { formError: "保存結果を確認できませんでした。再送信する前に資料一覧を確認してください。" };
+      }
+    } else {
       logMaterialError("material.upload.unclassified", error);
     }
 

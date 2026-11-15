@@ -206,6 +206,10 @@ test("compensates a failed metadata insert by deleting the uploaded object", asy
   console.error = (...args) => logs.push(args);
   const db = {
     material: {
+      findUnique: async () => {
+        operations.push("database-check");
+        return null;
+      },
       create: async () => {
         operations.push("database-create");
         throw new Error("database failure");
@@ -242,10 +246,11 @@ test("compensates a failed metadata insert by deleting the uploaded object", asy
   assert.equal(operations[1].startsWith("storage-put:labs/lab-1/materials/"), true);
   assert.equal(operations[2], "database-create");
   assert.equal(
-    operations[3],
+    operations[5],
     `storage-delete:${operations[1].slice("storage-put:".length)}`,
   );
-  assert.equal(operations[4], "quota-release");
+  assert.equal(operations[3], "quota-release");
+  assert.equal(operations[4], "database-check");
   assert.deepEqual(logs, [
     ["Material operation failed.", { stage: "material.upload.metadata-create", name: "Error" }],
   ]);
@@ -352,6 +357,10 @@ test("logs safe context when upload compensation fails", async () => {
   console.error = (...args) => logs.push(args);
   const db = {
     material: {
+      findUnique: async () => {
+        operations.push("database-check");
+        return null;
+      },
       create: async () => {
         operations.push("database-create");
         throw Object.assign(new Error("database failure with private row data"), {
@@ -395,8 +404,9 @@ test("logs safe context when upload compensation fails", async () => {
     "quota-reserve",
     "storage-put",
     "database-create",
-    "storage-delete",
     "quota-release",
+    "database-check",
+    "storage-delete",
   ]);
   assert.equal(logs.length, 2);
   assert.deepEqual(logs[0][1], {
@@ -526,3 +536,107 @@ test("sanitizes file names before placing them in HTTP headers", () => {
 
   assert.doesNotMatch(response.headers.get("content-disposition"), /\r|\n/);
 });
+
+test("recovers a committed upload when PostgreSQL's success response is lost", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const body = new Uint8Array([1, 2, 3]);
+  let row;
+  let uploadedKey;
+  let reservationChecked = false;
+  const db = {
+    material: {
+      async findUnique({ where }) {
+        assert.equal(reservationChecked, true);
+        assert.deepEqual(where, { storageKey: uploadedKey, labId: "lab-1" });
+        return row;
+      },
+      async findFirst({ where }) {
+        assert.deepEqual(where, { id: row.id, labId: "lab-1" });
+        return row;
+      },
+    },
+  };
+  const storage = {
+    async putObject({ key }) { uploadedKey = key; },
+    async deleteObject() { assert.fail("referenced object must be kept"); },
+    async getObject(key) {
+      assert.equal(key, uploadedKey);
+      return { body };
+    },
+  };
+  const result = await createMaterial(db, storage, {
+    labId: "lab-1", userId: "user-1", title: "Lab notes", description: null,
+    originalFileName: "paper.pdf", contentType: "application/pdf", sizeBytes: body.length, body,
+  }, {
+    reserve: async () => "reservation-1",
+    commit: async (_db, _reservationId, data) => {
+      row = { id: "material-1", ...data };
+      throw new Error("connection lost after commit");
+    },
+    release: async () => {
+      reservationChecked = true;
+      return false;
+    },
+  });
+  assert.equal(result, row);
+  assert.equal((await getMaterialFile(db, storage, {
+    labId: "lab-1", materialId: result.id,
+  })).body, body);
+});
+
+test("cleans up an expired upload only after checking that no record exists", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const operations = [];
+  let uploadedKey;
+  const db = { material: { async findUnique() {
+    operations.push("check");
+    return null;
+  } } };
+
+  await assert.rejects(createMaterial(db, {
+    async putObject({ key }) { uploadedKey = key; },
+    async deleteObject(key) {
+      assert.equal(key, uploadedKey);
+      operations.push("delete");
+    },
+  }, {
+    labId: "lab-1", userId: "user-1", title: "Lab notes", description: null,
+    originalFileName: "paper.pdf", contentType: "application/pdf", sizeBytes: 1, body: new Uint8Array(1),
+  }, {
+    reserve: async () => "reservation-1",
+    commit: async () => { throw new StorageQuotaError("RESERVATION_EXPIRED"); },
+    release: async () => { operations.push("release"); return false; },
+  }), { code: "METADATA_CREATE_FAILED" });
+
+  assert.deepEqual(operations, ["release", "check", "delete"]);
+});
+
+for (const failureStage of ["reservation-release", "commit-check"]) {
+  test(`keeps the object if upload recovery fails at ${failureStage}`, async (t) => {
+    const log = t.mock.method(console, "error", () => {});
+    const db = { material: { async findUnique() {
+      assert.equal(failureStage, "commit-check");
+      throw new Error("private connection string");
+    } } };
+    let deleted = false;
+
+    await assert.rejects(createMaterial(db, {
+      putObject: async () => {},
+      deleteObject: async () => { deleted = true; },
+    }, {
+      labId: "lab-1", userId: "user-1", title: "Lab notes", description: null,
+      originalFileName: "paper.pdf", contentType: "application/pdf", sizeBytes: 1, body: new Uint8Array(1),
+    }, {
+      reserve: async () => "reservation-1",
+      commit: async () => { throw new Error("unknown commit outcome"); },
+      release: async () => {
+        if (failureStage === "reservation-release") throw new Error("private connection string");
+        return true;
+      },
+    }), { code: "METADATA_CREATE_UNCONFIRMED" });
+    assert.equal(deleted, false);
+    assert.deepEqual(log.mock.calls[1].arguments[1], {
+      stage: `material.upload.${failureStage}`, name: "Error",
+    });
+  });
+}
