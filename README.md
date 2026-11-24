@@ -208,7 +208,20 @@ docker compose down
 
 ## テスト・動作確認
 
-自動検証ではNode.js標準の`node:test`によるテスト、ESLint、TypeScript確認、Next.js buildを使います。実ブラウザーのE2Eは手動確認であり、自動ブラウザーE2Eテストは導入していません。
+自動検証ではNode.js標準の`node:test`によるテスト、ESLint、TypeScript確認、Next.js buildを使います。
+
+### 一覧画面のブラウザーテスト
+
+Node.js 24で `npm ci` を実行し、Dockerを起動してから次のコマンドを実行します。
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+テストはPC幅とスマホ幅のChromiumで、タスク・資料の絞り込み、詳細から一覧への復帰、追加ダイアログなどを検証します。実行ごとに専用PostgreSQLコンテナと `http://127.0.0.1:3100` のテストサーバーを起動し、終了時に片付けます。3100番ポートを空けて実行してください。開発用DB、Googleログイン、SeaweedFSの準備は不要です。単体テストは `node --test` で実行できます。
+
+### 過去の検証記録
 
 | 確認方法 | コマンド・範囲 | 結果 |
 | --- | --- | --- |
@@ -220,7 +233,7 @@ docker compose down
 | 手動ブラウザーE2E（主要導線） | Google OAuth、Profile、Lab、Member、Task、Material、Logout | PASS |
 | 認可境界（ユーザー手動確認） | 別Lab URL、Task / Material ID指定、Owner限定操作、Server Action相当の送信値改変 | PASS |
 
-主要導線は実ブラウザーで確認しました。認可境界は、前回BLOCKEDだった項目をユーザーが手動で確認しPASSと報告した結果です。自動ブラウザーE2Eテストは導入していません。
+主要導線は実ブラウザーで手動確認した結果です。認可境界は、前回BLOCKEDだった項目をユーザーが手動で確認しPASSと報告した結果です。
 
 2026-10-22のこの作業環境では`fonts.googleapis.com`を名前解決できず、通常の本番ビルドはGoogle Fonts取得時に停止しました。アプリコードのビルド確認はNext.jsのテスト用Google Fontsモックを使って完了しています。本番デプロイでは実際のGoogle Fonts取得を含むビルドを確認してください。
 

@@ -48,14 +48,16 @@ test("任意の説明が空白のみならnullに変換する", () => {
   assert.equal(result.data.description, null);
 });
 
-test("ファイルが未選択の場合と4MiBを超える場合は拒否する", () => {
+test("ファイルが未選択、0バイト、4MiB超過の場合は拒否する", () => {
   const missing = validateMaterialInput(validInput({ file: null }));
+  const empty = validateMaterialInput(validInput({ file: validFile({ size: 0 }) }));
   const tooLarge = validateMaterialInput(
     validInput({ file: validFile({ size: MAX_MATERIAL_FILE_SIZE + 1 }) }),
   );
 
   assert.equal(MAX_MATERIAL_FILE_SIZE, 4 * 1024 * 1024);
   assert.ok(missing.fieldErrors.file);
+  assert.ok(empty.fieldErrors.file);
   assert.ok(tooLarge.fieldErrors.file);
 });
 
@@ -111,13 +113,15 @@ test("編集時はファイルを選択せずに説明を空欄にできる", ()
   assert.equal(validateMaterialEditInput({ title: "改訂版", description: "", file: "bad" }).success, false);
 });
 
-test("差し替えにも新規アップロードと同じ形式とサイズの制限を適用する", () => {
-  assert.equal(validateMaterialEditInput(validInput({ file: validFile({ size: MAX_MATERIAL_FILE_SIZE }) })).success, true);
-  for (const file of [
-    validFile({ size: 0 }),
-    validFile({ size: MAX_MATERIAL_FILE_SIZE + 1 }),
-    validFile({ type: "text/plain" }),
-  ]) {
-    assert.ok(validateMaterialEditInput(validInput({ file })).fieldErrors.file);
-  }
+test("差し替えファイルを検証し、受け付けたファイルの情報を返す", () => {
+  const mismatched = validateMaterialEditInput(validInput({ file: validFile({ type: "text/plain" }) }));
+  assert.ok(mismatched.fieldErrors.file);
+  assert.deepEqual(validateMaterialEditInput(validInput()), {
+    success: true,
+    data: {
+      title: "Lab notes",
+      description: "Meeting notes",
+      file: { originalFileName: "paper.pdf", contentType: "application/pdf", sizeBytes: 1024 },
+    },
+  });
 });

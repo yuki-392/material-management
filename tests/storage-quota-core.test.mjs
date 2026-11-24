@@ -254,7 +254,7 @@ function applyUpdate(target, data) {
   }
 }
 
-test("アップロード容量を予約し、全体の上限を超える同時アップロードを拒否する", async () => {
+test("先行予約を含めると全体の容量上限を超える場合、後続の予約を拒否する", async () => {
   const { db, state } = quotaDatabase({
     labLimitBytes: GLOBAL_STORAGE_LIMIT_BYTES,
     materialBytes: Number(GLOBAL_STORAGE_LIMIT_BYTES - 4_000_000n),
@@ -293,7 +293,7 @@ test("Labの割当容量を超える予約を拒否する", async () => {
   assert.equal(state.control.reservedBytes, 0n);
 });
 
-test("同じLabの容量を使う同時アップロードを直列化する", async () => {
+test("先行予約を含めるとLabの割当容量を超える場合、後続の予約を拒否する", async () => {
   const { db, state } = quotaDatabase({
     labLimitBytes: 1_000_000_000n,
     materialBytes: 996_000_000,

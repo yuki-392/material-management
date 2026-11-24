@@ -257,99 +257,62 @@ test("DBに資料を登録できなかった場合は保存済みのファイル
   ]);
 });
 
-test("ストレージへの保存に失敗した場合はエラーを分類し、資料をDBに登録しない", async () => {
-  const storageFailure = Object.assign(new Error("storage failure"), {
-    name: "AccessDenied",
-  });
-  let databaseCalled = false;
-  const db = {
-    material: {
-      create: async () => {
-        databaseCalled = true;
-      },
+for (const { title, failure, code, log } of [
+  {
+    title: "ファイル保存が拒否された場合は保存エラーとして記録し、資料を登録しない",
+    failure: Object.assign(new Error("storage failure"), { name: "AccessDenied" }),
+    code: "STORAGE_UPLOAD_FAILED",
+    log: { stage: "material.upload.storage-put", name: "AccessDenied" },
+  },
+  {
+    title: "ストレージ設定が不足している場合は設定エラーとして記録し、資料を登録しない",
+    failure: Object.assign(new Error("storage credentials are missing"), {
+      code: "MISSING_STORAGE_CONFIGURATION",
+    }),
+    code: "STORAGE_CONFIGURATION_FAILED",
+    log: {
+      stage: "material.upload.storage-config",
+      name: "Error",
+      code: "MISSING_STORAGE_CONFIGURATION",
     },
-  };
-  const storage = {
-    putObject: async () => { throw storageFailure; },
-    deleteObject: async () => {},
-  };
+  },
+]) {
+  test(title, async () => {
+    let databaseCalled = false;
+    const db = { material: { create: async () => { databaseCalled = true; } } };
+    const storage = {
+      putObject: async () => { throw failure; },
+      deleteObject: async () => {},
+    };
+    const logs = [];
+    const originalConsoleError = console.error;
+    console.error = (...args) => logs.push(args);
 
-  const logs = [];
-  const originalConsoleError = console.error;
-  console.error = (...args) => logs.push(args);
-  try {
-    await assert.rejects(
-      createMaterial(db, storage, {
-        labId: "lab-1",
-        userId: "user-1",
-        title: "Lab notes",
-        description: null,
-        originalFileName: "paper.pdf",
-        contentType: "application/pdf",
-        sizeBytes: 3,
-        body: new Uint8Array([1, 2, 3]),
-      }, createTestQuota()),
-      (error) =>
-        error instanceof MaterialOperationError &&
-        error.code === "STORAGE_UPLOAD_FAILED" &&
-        error.cause === storageFailure,
-    );
-  } finally {
-    console.error = originalConsoleError;
-  }
+    try {
+      await assert.rejects(
+        createMaterial(db, storage, {
+          labId: "lab-1",
+          userId: "user-1",
+          title: "Lab notes",
+          description: null,
+          originalFileName: "paper.pdf",
+          contentType: "application/pdf",
+          sizeBytes: 3,
+          body: new Uint8Array([1, 2, 3]),
+        }, createTestQuota()),
+        (error) =>
+          error instanceof MaterialOperationError &&
+          error.code === code &&
+          error.cause === failure,
+      );
+    } finally {
+      console.error = originalConsoleError;
+    }
 
-  assert.equal(databaseCalled, false);
-  assert.deepEqual(logs, [
-    ["Material operation failed.", { stage: "material.upload.storage-put", name: "AccessDenied" }],
-  ]);
-});
-
-test("ストレージ設定の失敗とファイル保存の失敗を区別してログに記録する", async () => {
-  const configurationFailure = Object.assign(
-    new Error("storage credentials are missing"),
-    { code: "MISSING_STORAGE_CONFIGURATION" },
-  );
-  const db = { material: { create: async () => assert.fail("DB must not be called") } };
-  const storage = {
-    putObject: async () => { throw configurationFailure; },
-    deleteObject: async () => {},
-  };
-  const logs = [];
-  const originalConsoleError = console.error;
-  console.error = (...args) => logs.push(args);
-
-  try {
-    await assert.rejects(
-      createMaterial(db, storage, {
-        labId: "lab-1",
-        userId: "user-1",
-        title: "Lab notes",
-        description: null,
-        originalFileName: "paper.pdf",
-        contentType: "application/pdf",
-        sizeBytes: 3,
-        body: new Uint8Array([1, 2, 3]),
-      }, createTestQuota()),
-      (error) =>
-        error instanceof MaterialOperationError &&
-        error.code === "STORAGE_CONFIGURATION_FAILED" &&
-        error.cause === configurationFailure,
-    );
-  } finally {
-    console.error = originalConsoleError;
-  }
-
-  assert.deepEqual(logs, [
-    [
-      "Material operation failed.",
-      {
-        stage: "material.upload.storage-config",
-        name: "Error",
-        code: "MISSING_STORAGE_CONFIGURATION",
-      },
-    ],
-  ]);
-});
+    assert.equal(databaseCalled, false);
+    assert.deepEqual(logs, [["Material operation failed.", log]]);
+  });
+}
 
 test("補償削除に失敗した場合は安全な情報だけをログに記録する", async () => {
   const operations = [];
